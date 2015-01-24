@@ -4,12 +4,21 @@ ECM Command Line Interface
 
 import argparse
 import getpass
+import json
 import os
 import syndicate
 from .commands import logs, settings
-from syndicate.adapters import sync as synadapter
+from syndicate.adapters.sync import LoginAuth
+from requests.utils import dict_from_cookiejar
 
-COOKIE = os.environ.get('ECMCLI_COOKIE')
+
+SITE = 'https://cradlepointecm.com'
+COOKIES_FILE = os.path.expanduser('~/.ecmcli_cookies')
+try:
+    with open(COOKIES_FILE) as f:
+        COOKIES = json.load(f)
+except IOError:
+    COOKIES = None
 
 routers_parser = argparse.ArgumentParser(add_help=False)
 routers_parser.add_argument('--routers', nargs='+', type=int)
@@ -18,13 +27,15 @@ routers_parser.add_argument('--routers', nargs='+', type=int)
 class ECMService(syndicate.Service):
 
     def do(self, *args, **kwargs):
+        global COOKIES
         r = super().do(*args, **kwargs)
-        f = self.adapter
-        import pdb
-        pdb.set_trace()
+        cookies = dict_from_cookiejar(self.adapter.session.cookies)
+        if cookies != COOKIES:
+            with open(COOKIES_FILE, 'w') as f:
+                os.chmod(COOKIES_FILE, 0o600)
+                json.dump(cookies, f)
+            COOKIES = cookies
         return r
-
-uri='https://www.cradlepointecm.com',
 
 
 def main():
@@ -42,16 +53,16 @@ def main():
 
     args = parser.parse_args()
 
-    if COOKIE:
-        auth = synadapter.HeaderAuth('Cookie', COOKIE)
+    api = ECMService(uri=SITE, urn='/api/v1/')
+    if COOKIES:
+        api.adapter.session.cookies.update(COOKIES)
     else:
-        user, passwd = args.username, args.password
-        if not user:
-            user = raw_input('Username: ')
-        if not passwd:
-            passwd = getpass.getpass()
-        auth = user, passwd
-
-    api = ECMService(uri='https://www.cradlepointecm.com', urn='/api/v1/',
-                     auth=auth)
+        user = args.username or input('Username: ')
+        passwd = args.password or getpass.getpass()
+        login_url = '%s/api/v1/login/' % SITE
+        auth = LoginAuth(url=login_url, method='POST', data={
+            "username": user,
+            "password": passwd
+        })
+        api.auth = api.adapter.auth = auth
     args.invoke(api, args)
