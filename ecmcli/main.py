@@ -2,8 +2,6 @@
 ECM Command Line Interface
 """
 
-from __future__ import print_function, division
-
 import argparse
 import getpass
 import os
@@ -15,6 +13,18 @@ COOKIE = os.environ.get('ECMCLI_COOKIE')
 
 routers_parser = argparse.ArgumentParser(add_help=False)
 routers_parser.add_argument('--routers', nargs='+', type=int)
+
+
+class ECMService(syndicate.Service):
+
+    def do(self, *args, **kwargs):
+        r = super().do(*args, **kwargs)
+        f = self.adapter
+        import pdb
+        pdb.set_trace()
+        return r
+
+uri='https://www.cradlepointecm.com',
 
 
 def main():
@@ -42,6 +52,6 @@ def main():
             passwd = getpass.getpass()
         auth = user, passwd
 
-    api = syndicate.Service(uri='https://www.cradlepointecm.com',
-                            urn='/api/v1/', auth=auth)
+    api = ECMService(uri='https://www.cradlepointecm.com', urn='/api/v1/',
+                     auth=auth)
     args.invoke(api, args)
