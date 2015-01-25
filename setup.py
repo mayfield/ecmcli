@@ -26,6 +26,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'syndicate',
+        'humanize'
     ],
     entry_points = {
         'console_scripts': ['ecm=ecmcli.main:main'],
