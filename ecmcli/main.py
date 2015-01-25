@@ -12,7 +12,7 @@ import os
 import syndicate
 import syndicate.client
 import sys
-from .commands import logs, settings, flashleds, reboot
+from .commands import logs, settings, flashleds, reboot, wanrate
 from syndicate.adapters.sync import LoginAuth
 from requests.utils import dict_from_cookiejar
 
@@ -82,6 +82,9 @@ def main():
 
     p = subs.add_parser('reboot', parents=[routers_parser, reboot.parser])
     p.set_defaults(invoke=reboot.command)
+
+    p = subs.add_parser('wanrate', parents=[routers_parser, wanrate.parser])
+    p.set_defaults(invoke=wanrate.command)
 
     args = parser.parse_args()
     if not hasattr(args, 'invoke'):

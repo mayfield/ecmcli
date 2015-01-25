@@ -5,7 +5,6 @@ Download Device Logs from ECM.
 import argparse
 import collections
 import html
-from syndicate import data as syndata
 
 FORMAT = '%(timestamp)s [%(mac)s] [%(levelname)8s] [%(source)18s] %(message)s'
 

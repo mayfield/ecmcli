@@ -3,9 +3,7 @@ Flash LEDS of the router(s).
 """
 
 import argparse
-import html
 import time
-from syndicate import data as syndata
 
 MIN_FLASH_DELAY = 0.200
 
@@ -13,11 +11,11 @@ parser = argparse.ArgumentParser(add_help=False)
 
 
 def command(api, args, router_ids):
-    print("Flashing LEDS for:")
     rfilter = {
         "id__in": ','.join(map(str, router_ids)),
         "timeout": 0
     }
+    print("Flashing LEDS for:")
     for rid, rinfo in router_ids.items():
         print("    %s (%s)" % (rinfo['name'], rid))
     leds = dict.fromkeys((
