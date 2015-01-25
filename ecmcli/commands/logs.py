@@ -17,14 +17,7 @@ parser.add_argument('-l', '--level', help="Log level to " \
                     "include (debug, info, warning, error and/or critical)")
 
 
-def command(api, args):
-    filters = {"id__in": ','.join(map(str, args.routers))} \
-              if args.routers else {}
-    routers = api.get_pager('routers', fields='id,mac,name', **filters)
-    router_ids = collections.OrderedDict((x['id'], x) for x in routers)
-    for rid, rinfo in router_ids.items():
-        rinfo['display_name'] = '%s (%s) %s' % (rinfo['name'], rid,
-                                rinfo['mac'])
+def command(api, args, router_ids):
     if args.clear:
         clear(api, args, router_ids)
     else:
@@ -33,7 +26,7 @@ def command(api, args):
 
 def clear(api, args, router_ids):
     for rid, rinfo in router_ids.items():
-        print("Clearing logs for: %s" % rinfo['display_name'])
+        print("Clearing logs for: %s (%s)" % (rinfo['name'], rid))
         api.delete('logs', rid)
 
 
@@ -42,7 +35,7 @@ def view(api, args, router_ids):
     if args.level:
         filters['levelname'] = args.level.upper()
     for rid, rinfo in router_ids.items():
-        print("Logs for: %s" % rinfo['display_name'])
+        print("Logs for: %s (%s)" % (rinfo['name'], rid))
         for x in api.get_pager('logs', rid, **filters):
             x['message'] = html.unescape(x['message'])
             x['mac'] = rinfo['mac']
