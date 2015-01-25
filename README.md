@@ -54,3 +54,21 @@ $ ecm logs
 ```
 
 
+**Monitoring WAN Rates**
+
+```shell
+$ ecm wanrate
+ Home 2100(24400): [device is offline],          Home Router(138927): 68.1 KiB,                Home 1400(669): 0 Bytes
+ Home 2100(24400): [device is offline],          Home Router(138927): 43.6 KiB,                Home 1400(669): 0 Bytes
+ Home 2100(24400): [device is offline],          Home Router(138927): 40.6 KiB,                Home 1400(669): 0 Bytes
+ Home 2100(24400): [device is offline],          Home Router(138927): 49.7 KiB,                Home 1400(669): 0 Bytes
+```
+
+
+**Rebooting a specific router**
+
+```shell
+$ ecm reboot --routers 669
+Rebooting:
+    Home 1400 (669)
+```
