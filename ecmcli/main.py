@@ -7,7 +7,7 @@ import collections
 import logging
 import sys
 from . import api
-from .commands import logs, settings, flashleds, reboot, wanrate
+from .commands import logs, settings, flashleds, reboot, wanrate, cli
 
 #logging.basicConfig(level=0)
 
@@ -35,6 +35,9 @@ p.set_defaults(invoke=reboot.command)
 
 p = subs.add_parser('wanrate', parents=[routers_parser, wanrate.parser])
 p.set_defaults(invoke=wanrate.command)
+
+p = subs.add_parser('cli', parents=[routers_parser, cli.parser])
+p.set_defaults(invoke=cli.command)
 
 
 def main():
