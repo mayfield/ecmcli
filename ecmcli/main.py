@@ -5,6 +5,7 @@ ECM Command Line Interface
 import argparse
 import collections
 import logging
+import sys
 from . import api
 from .commands import logs, settings, flashleds, reboot, wanrate
 
@@ -46,6 +47,9 @@ def main():
               if getattr(args, 'routers', None) else {}
     routers = ecmapi.get_pager('routers', **filters)
     routers = collections.OrderedDict((x['id'], x) for x in routers)
+    if not routers:
+        print("WARNING: No Routers Found", file=sys.stderr)
+        exit(0)
     try:
         args.invoke(ecmapi, args, routers)
     except KeyboardInterrupt:

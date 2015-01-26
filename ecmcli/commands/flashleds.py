@@ -13,7 +13,7 @@ parser = argparse.ArgumentParser(add_help=False)
 
 def command(api, args, routers):
     rfilter = {
-        "id__in": ','.join(map(str, routers)),
+        "id__in": ','.join(routers),
         "timeout": 0
     }
     print("Flashing LEDS for:")
