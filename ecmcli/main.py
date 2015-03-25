@@ -7,9 +7,17 @@ import collections
 import logging
 import sys
 from . import api
-from .commands import logs, settings, flashleds, reboot, wanrate, cli
+from .commands import (
+    flashleds,
+    logs,
+    ls,
+    reboot,
+    settings,
+    shell,
+    wanrate,
+)
 
-#logging.basicConfig(level=0)
+# logging.basicConfig(level=0)
 
 routers_parser = argparse.ArgumentParser(add_help=False)
 routers_parser.add_argument('--routers', nargs='+')
@@ -36,8 +44,11 @@ p.set_defaults(invoke=reboot.command)
 p = subs.add_parser('wanrate', parents=[routers_parser, wanrate.parser])
 p.set_defaults(invoke=wanrate.command)
 
-p = subs.add_parser('cli', parents=[routers_parser, cli.parser])
-p.set_defaults(invoke=cli.command)
+p = subs.add_parser('shell', parents=[routers_parser, shell.parser])
+p.set_defaults(invoke=shell.command)
+
+p = subs.add_parser('ls', parents=[ls.parser])
+p.set_defaults(invoke=ls.command)
 
 
 def main():
