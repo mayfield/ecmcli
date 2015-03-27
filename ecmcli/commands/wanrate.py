@@ -13,7 +13,7 @@ parser.add_argument('-s', '--sampletime', help='How long to wait between '
                     'sample captures in seconds', default=DEF_SAMPLE_DELAY)
 
 
-def command(api, args, routers):
+def command(api, args, routers=None):
     rfilter = {
         "id__in": ','.join(routers)
     }

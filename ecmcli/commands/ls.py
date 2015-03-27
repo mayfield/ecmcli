@@ -13,7 +13,7 @@ parser.add_argument('-v', '--verbose', action='store_true',
 
 
 
-def command(api, args, routers):
+def command(api, args, routers=None):
     printer = verbose_printer if args.verbose else terse_printer
 
     printer(routers.values(), api=api)

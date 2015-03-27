@@ -11,7 +11,7 @@ MIN_FLASH_DELAY = 0.200
 parser = argparse.ArgumentParser(add_help=False)
 
 
-def command(api, args, routers):
+def command(api, args, routers=None):
     rfilter = {
         "id__in": ','.join(routers),
         "timeout": 0

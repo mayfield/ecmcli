@@ -15,7 +15,7 @@ parser.add_argument('-l', '--level', help="Log level to "
                     "include (debug, info, warning, error and/or critical)")
 
 
-def command(api, args, routers):
+def command(api, args, routers=None):
     if args.clear:
         clear(api, args, routers)
     else:

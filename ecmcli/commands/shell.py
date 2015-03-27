@@ -22,7 +22,7 @@ raw_in = sys.stdin.buffer.raw
 raw_out = sys.stdout.buffer.raw
 
 
-def command(api, args, routers):
+def command(api, args, routers=None):
     if args.interact:
         return interactive_session(api, args.interact)
     else:
@@ -68,6 +68,7 @@ def buffered_read(timeout=0.500):
 
 def _interactive_session(api, router):
     print("Connecting to: Router %s" % router)
+    print("Type ~~ rapidly to close session")
     (w_save, h_save) = (w, h) = window_size()
     api.put('remote/control/csterm/ecmcli-%s' % api.sessionid, {
         "w": w,
@@ -75,6 +76,8 @@ def _interactive_session(api, router):
     }, id=router)
     while True:
         in_data = buffered_read()
+        if b'~~' in in_data:
+            raise SystemExit('Session Closed')
         while True:
             w, h = window_size()
             if (w, h) != (w_save, h_save):

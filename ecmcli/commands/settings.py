@@ -7,5 +7,5 @@ import argparse
 parser = argparse.ArgumentParser(add_help=False)
 
 
-def command(api, args, routers):
+def command(api, args):
     print("SETTINGS")

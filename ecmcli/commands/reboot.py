@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(add_help=False)
 
 
-def command(api, args, routers):
+def command(api, args, routers=None):
     print("Rebooting:")
     rfilter = {
         "id__in": ','.join(routers),
