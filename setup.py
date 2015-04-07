@@ -16,8 +16,8 @@ def long_desc():
 
 setup(
     name='ecmcli',
-    version='0.2.0',
-    description='Command Line Client for Cradlepoint ECM',
+    version='0.3.0',
+    description='Command Line Interface for Cradlepoint ECM',
     author='Justin Mayfield',
     author_email='tooker@gmail.com',
     url='https://github.com/mayfield/ecmcli/',
@@ -36,6 +36,6 @@ setup(
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
-        'Programming Language :: Python',
+        'Programming Language :: Python :: 3.4',
     ]
 )
