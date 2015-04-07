@@ -78,7 +78,6 @@ def main():
         filters = {"id__in": ','.join(map(str, args.routers))} \
                   if getattr(args, 'routers', None) else {}
         routers = ecmapi.get_pager('routers', **filters)
-        routers = collections.OrderedDict((x['id'], x) for x in routers)
         if not routers:
             print("WARNING: No Routers Found", file=sys.stderr)
             exit(0)

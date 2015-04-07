@@ -3,7 +3,6 @@ Download Device Logs from ECM.
 """
 
 import argparse
-import html
 
 FORMAT = '%(timestamp)s [%(mac)s] [%(levelname)8s] [%(source)18s] %(message)s'
 
@@ -23,18 +22,17 @@ def command(api, args, routers=None):
 
 
 def clear(api, args, routers):
-    for rid, rinfo in routers.items():
-        print("Clearing logs for: %s (%s)" % (rinfo['name'], rid))
-        api.delete('logs', rid)
+    for rinfo in routers:
+        print("Clearing logs for: %s (%s)" % (rinfo['name'], rinfo['id']))
+        api.delete('logs', rinfo['id'])
 
 
 def view(api, args, routers):
     filters = {}
     if args.level:
         filters['levelname'] = args.level.upper()
-    for rid, rinfo in routers.items():
-        print("Logs for: %s (%s)" % (rinfo['name'], rid))
-        for x in api.get_pager('logs', rid, **filters):
-            x['message'] = html.unescape(x['message'])
+    for rinfo in routers:
+        print("Logs for: %s (%s)" % (rinfo['name'], rinfo['id']))
+        for x in api.get_pager('logs', rinfo['id'], **filters):
             x['mac'] = rinfo['mac']
             print(FORMAT % x)

@@ -4,7 +4,6 @@ Pull data or interact with the shell of ECM clients.
 
 import argparse
 import fcntl
-import html
 import os
 import select
 import struct
@@ -91,29 +90,30 @@ def _interactive_session(api, router):
             if out['success']:
                 if not out['data']:
                     break
-                raw_out.write(html.unescape(out['data']).encode())
+                raw_out.write(out['data'].encode())
             else:
                 raise Exception('%s (%s)' % (out['exception'], out['reason']))
             in_data = b""
 
 
 def bulk_session(api, args, routers):
-    rfilter = {
-        "id__in": ','.join(routers)
-    }
     command = '%s\n' % ' '.join(args.command)
-    data = api.put('remote/control/csterm/ecmcli-%s/k' % api.sessionid,
-                   command, **rfilter)
-    for x in data:
+    for rinfo in routers:
+        r = api.put('remote/control/csterm/ecmcli-%s/k' % api.sessionid,
+                    command, id=rinfo['id'])[0]
         print()
-        print("%s (%s):" % (routers[str(x['id'])]['name'], x['id']))
+        print("%s (%s):" % (rinfo['name'], rinfo['id']))
         print("=" * 80)
-        if x['success']:
-            if x['data'] == command:
+        if r['success']:
+            if r['data'] == command:
                 print("Warning: unsupported firmware")
             else:
-                print(html.unescape(x['data']))
+                print(r['data'])
         else:
-            print("Error: %s / %s" % (x['exception'], x['reason']))
+            print("Error:", r['exception'])
+            if 'reason' in r:
+                print("\tReason:", r['reason'])
+            if 'message' in r:
+                print("\tMessage:", r['message'])
         print("-" * 80)
         print()

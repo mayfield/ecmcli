@@ -4,7 +4,6 @@ List ECM Routers.
 
 import argparse
 import functools
-import html
 import humanize
 
 parser = argparse.ArgumentParser(add_help=False)
@@ -15,8 +14,7 @@ parser.add_argument('-v', '--verbose', action='store_true',
 
 def command(api, args, routers=None):
     printer = verbose_printer if args.verbose else terse_printer
-
-    printer(routers.values(), api=api)
+    printer(routers, api=api)
 
 
 @functools.lru_cache(maxsize=2^16)
@@ -64,11 +62,11 @@ def verbose_printer(routers, api=None):
 
         def fetch_sub_name_and_id(subres):
             sub = fetch_sub(subres)
-            return sub and '%s (%s)' % (html.unescape(sub['name']), sub['id'])
+            return sub and '%s (%s)' % (sub['name'], sub['id'])
 
         if not first:
             print()
-        print('%s (%s):' % (html.unescape(x['name']), x['id']))
+        print('%s (%s):' % (x['name'], x['id']))
         x['since'] = since(x['state_ts'])
         x['joined'] = since(x['create_ts']) + ' ago'
         x['account_info'] = fetch_sub_name_and_id('account')
@@ -83,14 +81,12 @@ def verbose_printer(routers, api=None):
                          ['sf_entitlements'][0]['name']
         x['entitlements'] = ', '.join(map(acc, ents)) if ents else 'None'
         for key, label in fields:
-            field = html.unescape(str(x[key]))
-            print(fmt % (label, field))
+            print(fmt % (label, x[key]))
         first = False
 
 
 def terse_printer(routers, api=None):
     fmt = '%(name)-20s %(id)6s %(ip_address)16s %(state)8s (%(since)s)'
     for x in routers:
-        x['name'] = html.unescape(x['name'])
         x['since'] = since(x['state_ts'])
         print(fmt % x)

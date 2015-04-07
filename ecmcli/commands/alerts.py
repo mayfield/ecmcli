@@ -5,7 +5,6 @@ Anaylize and Report ECM Alerts.
 import argparse
 import collections
 import functools
-import html
 import humanize
 import sys
 

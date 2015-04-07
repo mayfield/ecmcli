@@ -9,8 +9,16 @@ import json
 import os
 import syndicate
 import syndicate.client
+import syndicate.data
 import sys
 from syndicate.adapters.sync import LoginAuth
+
+
+syndicate.data.serializers['htmljson'] = syndicate.data.Serializer(
+    'application/json',
+    syndicate.data.serializers['json'].encode,
+    lambda x: syndicate.data.serializers['json'].decode(html.unescape(x))
+)
 
 
 class ECMService(syndicate.Service):
@@ -30,7 +38,8 @@ class ECMService(syndicate.Service):
                              data=creds)
         else:
             auth = None
-        super().__init__(uri=self.site, urn=self.api_prefix, auth=auth)
+        super().__init__(uri=self.site, urn=self.api_prefix, auth=auth,
+                         serializer='htmljson')
 
     def bind_adapter(self, adapter):
         super().bind_adapter(adapter)

@@ -12,13 +12,15 @@ parser = argparse.ArgumentParser(add_help=False)
 
 
 def command(api, args, routers=None):
+    ids = []
+    print("Flashing LEDS for:")
+    for rinfo in routers:
+        print("    %s (%s)" % (rinfo['name'], rinfo['id']))
+        ids.append(rinfo['id'])
     rfilter = {
-        "id__in": ','.join(routers),
+        "id__in": ','.join(ids),
         "timeout": 0
     }
-    print("Flashing LEDS for:")
-    for rid, rinfo in routers.items():
-        print("    %s (%s)" % (rinfo['name'], rid))
     leds = dict.fromkeys((
         "LED_ATTENTION",
         "LED_SS_1",

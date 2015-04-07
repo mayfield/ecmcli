@@ -3,7 +3,6 @@ List ECM Accounts.
 """
 
 import argparse
-import html
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument('-v', '--verbose', action='store_true',
@@ -22,5 +21,4 @@ def verbose_printer(api=None):
 def terse_printer(api=None):
     fmt = '%(name)-20s %(id)6s'
     for x in api.get_pager('accounts'):
-        x['name'] = html.unescape(x['name'])
         print(fmt % x)

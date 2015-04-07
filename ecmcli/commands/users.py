@@ -3,9 +3,6 @@ List/Edit/Manage ECM Users.
 """
 
 import argparse
-import functools
-import html
-import humanize
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument('-c', '--create', action='store_true',
@@ -16,7 +13,6 @@ parser.add_argument('-d', '--delete', action='store_true',
                     help="Delete user.")
 parser.add_argument('-v', '--verbose', action='store_true',
                     help="Verbose output.")
-
 
 
 def command(api, args):
@@ -50,8 +46,5 @@ def verbose_printer(api=None):
 def terse_printer(api=None):
     fmt = '%(name)-30s %(id)6s %(email)30s'
     for x in api.get_pager('users', expand='profile'):
-        x['email'] = html.unescape(x['email'])
-        x['name'] = '%s %s (%s)' % (html.unescape(x['first_name']),
-                    html.unescape(x['last_name']),
-                    html.unescape(x['username']))
+        x['name'] = '%(first_name)s %(last_name)s (%(username)s)' % x
         print(fmt % x)

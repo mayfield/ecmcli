@@ -9,10 +9,7 @@ parser = argparse.ArgumentParser(add_help=False)
 
 def command(api, args, routers=None):
     print("Rebooting:")
-    rfilter = {
-        "id__in": ','.join(routers),
-        "timeout": 0
-    }
-    for rid, rinfo in routers.items():
-        print("    %s (%s)" % (rinfo['name'], rid))
-    api.put('remote/control/system/reboot', True, **rfilter)
+    for rinfo in routers:
+        print("    %s (%s)" % (rinfo['name'], rinfo['id']))
+        api.put('remote/control/system/reboot', True, timeout=0,
+                id=rinfo['id'])
