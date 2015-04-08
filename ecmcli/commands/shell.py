@@ -9,8 +9,11 @@ import select
 import struct
 import sys
 import termios
-import time
 import tty
+
+poll_max_retry = 30  # Max secs for polling when no activity is detected.
+key_idle_timeout = 0.200  # How long we wait for additional keystrokes after
+                          # one or more keystrokes have been detected.
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument('command', nargs="*", help='Command to execute')
@@ -53,47 +56,52 @@ def interactive_session(api, router):
         termios.tcsetattr(stdin, termios.TCSADRAIN, ttysave)
 
 
-def buffered_read(timeout=0.500):
-    """ Read from stdin up to an anthropomorphic timeout. """
+def buffered_read(idle_timeout=key_idle_timeout,
+                  max_timeout=None):
     buf = []
-    ts = time.time()
+    timeout = max_timeout
     while True:
-        to = timeout-(time.time()-ts)
-        if select.select([raw_in.fileno()], [], [], to)[0]:
+        if select.select([raw_in.fileno()], [], [], timeout)[0]:
             buf.append(raw_in.read())
+            timeout = key_idle_timeout
         else:
-            return b''.join(buf)
+            break
+    sbuf = b''.join(buf).decode()
+    if '~~' in sbuf:
+        raise SystemExit('Session Closed')
+    return sbuf
 
 
 def _interactive_session(api, router):
     print("Connecting to: Router %s" % router)
     print("Type ~~ rapidly to close session")
-    (w_save, h_save) = (w, h) = window_size()
-    api.put('remote/control/csterm/ecmcli-%s' % api.sessionid, {
-        "w": w,
-        "h": h
-    }, id=router)
+    w_save, h_save = None, None
+    res = 'remote/control/csterm/ecmcli-%s/' % api.sessionid
+    in_data = '\n'
+    poll_timeout = key_idle_timeout  # somewhat arbitrary
     while True:
-        in_data = buffered_read()
-        if b'~~' in in_data:
-            raise SystemExit('Session Closed')
-        while True:
-            w, h = window_size()
-            if (w, h) != (w_save, h_save):
-                api.put('remote/control/csterm/ecmcli-%s/' % api.sessionid, {
-                    "w": w,
-                    "h": h,
-                }, id=router)
-                w_save, h_save = w, h
-            out = api.put('remote/control/csterm/ecmcli-%s/k' % api.sessionid,
-                          in_data.decode(), id=router)[0]
-            if out['success']:
-                if not out['data']:
-                    break
-                raw_out.write(out['data'].encode())
+        w, h = window_size()
+        if (w, h) != (w_save, h_save):
+            out = api.put(res, {
+                "w": w,
+                "h": h,
+                "k": in_data
+            }, id=router)[0]
+            w_save, h_save = w, h
+            data = out['data']['k'] if out['success'] else None
+        else:
+            out = api.put('%sk' % res, in_data, id=router)[0]
+            data = out['data'] if out['success'] else None
+        if out['success']:
+            if data:
+                raw_out.write(data.encode())
+                poll_timeout = 0  # Quickly look for more data
             else:
-                raise Exception('%s (%s)' % (out['exception'], out['reason']))
-            in_data = b""
+                poll_timeout += 0.200
+        else:
+            raise Exception('%s (%s)' % (out['exception'], out['reason']))
+        poll_timeout = min(poll_max_retry, poll_timeout)
+        in_data = buffered_read(max_timeout=poll_timeout)
 
 
 def bulk_session(api, args, routers):

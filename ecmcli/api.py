@@ -13,11 +13,20 @@ import syndicate.data
 import sys
 from syndicate.adapters.sync import LoginAuth
 
+class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
+
+    def parse_object(self, data):
+        data = super().parse_object(data)
+        for key, value in data.items():
+            if isinstance(value, str):
+                data[key] = html.unescape(value)
+        return data
+
 
 syndicate.data.serializers['htmljson'] = syndicate.data.Serializer(
     'application/json',
     syndicate.data.serializers['json'].encode,
-    lambda x: syndicate.data.serializers['json'].decode(html.unescape(x))
+    HTMLJSONDecoder().decode
 )
 
 
