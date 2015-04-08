@@ -13,6 +13,12 @@ parser.add_argument('-e', '--expand', action='store_true',
                     help="Expand each alert.")
 
 
+def since(dt):
+    """ Return humanized time since for an absolute datetime. """
+    since = dt.now(tz=dt.tzinfo) - dt
+    return humanize.naturaltime(since)[:-4]
+
+
 def command(api, args):
     last_ts = '2000-01-01 00:00+00:00'
     by_type = collections.OrderedDict()
