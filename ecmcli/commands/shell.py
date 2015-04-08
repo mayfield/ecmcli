@@ -72,6 +72,17 @@ def buffered_read(idle_timeout=key_idle_timeout,
     return sbuf
 
 
+def full_write(dstfile, srcdata):
+    """ Write into dstfile until it's done, accounting for short write()
+    calls. """
+    srcview = memoryview(srcdata)
+    size = len(srcview)
+    written = 0
+    while written < size:
+        select.select([], [dstfile.fileno()], [])  # block until writable
+        written += dstfile.write(srcview[written:])
+
+
 def _interactive_session(api, router):
     print("Connecting to: Router %s" % router)
     print("Type ~~ rapidly to close session")
@@ -94,7 +105,7 @@ def _interactive_session(api, router):
             data = out['data'] if out['success'] else None
         if out['success']:
             if data:
-                raw_out.write(data.encode())
+                full_write(raw_out, data.encode())
                 poll_timeout = 0  # Quickly look for more data
             else:
                 poll_timeout += 0.200
