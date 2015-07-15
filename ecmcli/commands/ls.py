@@ -11,7 +11,6 @@ parser.add_argument('-v', '--verbose', action='store_true',
                     help="Verbose output.")
 
 
-
 def command(api, args, routers=None):
     printer = verbose_printer if args.verbose else terse_printer
     printer(routers, api=api)
@@ -58,7 +57,7 @@ def verbose_printer(routers, api=None):
     for x in routers:
 
         def fetch_sub(subres):
-            return x[subres] and res_fetch(api, x[subres])
+            return x.get(subres) and res_fetch(api, x[subres])
 
         def fetch_sub_name_and_id(subres):
             sub = fetch_sub(subres)

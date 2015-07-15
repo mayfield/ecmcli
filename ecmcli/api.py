@@ -4,6 +4,7 @@ alterations we make to API calls, such as filtering by router ids.
 """
 
 import getpass
+import hashlib
 import html
 import json
 import os
@@ -38,7 +39,10 @@ class ECMService(syndicate.Service):
 
     def __init__(self, username=None, password=None):
         self.load_session()
-        if not self.sessionid:
+        # Eventually auth sig could be based on an api token too.
+        auth_sig = username and hashlib.sha1(username.encode()).hexdigest()
+        if not self.session_id or (auth_sig and self.auth_sig != auth_sig):
+            self.reset_session(auth_sig)
             creds = {
                 "username": username or input('ECM Username: '),
                 "password": password or getpass.getpass()
@@ -52,20 +56,26 @@ class ECMService(syndicate.Service):
 
     def bind_adapter(self, adapter):
         super().bind_adapter(adapter)
-        if self.sessionid:
-            self.adapter.session.cookies['sessionid'] = self.sessionid
+        if self.session_id:
+            self.adapter.session.cookies['sessionid'] = self.session_id
 
     def load_session(self):
+        self.auth_sig = None
         try:
             with open(self.session_file) as f:
-                self.sessionid = json.load(f)
+                d = json.load(f)
+                try:
+                    self.session_id, self.auth_sig = d
+                except ValueError:
+                    self.session_id = d
         except FileNotFoundError:
-            self.sessionid = None
+            self.session_id = None
 
-    def clear_session(self):
+    def reset_session(self, auth_sig=None):
         """ Delete the session state file and return True if an action
         happened. """
-        self.sessionid = None
+        self.session_id = None
+        self.auth_sig = auth_sig
         try:
             os.remove(self.session_file)
         except FileNotFoundError:
@@ -76,12 +86,12 @@ class ECMService(syndicate.Service):
     def check_session(self):
         """ ECM sometimes updates the session token. We make sure we are in
         sync. """
-        sessionid = self.adapter.session.cookies.get_dict()['sessionid']
-        if sessionid != self.sessionid:
+        session_id = self.adapter.session.cookies.get_dict()['sessionid']
+        if session_id != self.session_id:
             with open(self.session_file, 'w') as f:
                 os.chmod(self.session_file, 0o600)
-                json.dump(sessionid, f)
-            self.sessionid = sessionid
+                json.dump([session_id, self.auth_sig], f)
+            self.session_id = session_id
 
     def do(self, *args, **kwargs):
         """ Wrap some session and error handling around all API actions. """
@@ -99,6 +109,6 @@ class ECMService(syndicate.Service):
             print("  %-20s: %s" % (key.capitalize(),
                   html.unescape(str(val))), file=sys.stderr)
         if error.response['exception'] == 'unauthorized':
-            if self.clear_session():
+            if self.reset_session():
                 print('WARNING: Flushed session state', file=sys.stderr)
         exit(1)
