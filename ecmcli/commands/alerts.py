@@ -19,10 +19,11 @@ def since(dt):
     return humanize.naturaltime(since)[:-4]
 
 
-def command(api, args):
+def command(api, args, routers):
     last_ts = '2000-01-01 00:00+00:00'
     by_type = collections.OrderedDict()
     alerts = api.get_pager('alerts', created_ts__gt=last_ts,
+                           router__in=','.join(x['id'] for x in routers),
                            order_by='-created_ts')
     msg = "\rCollecting new alerts: %5d"
     print(msg % 0, end='')

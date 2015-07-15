@@ -87,7 +87,7 @@ def _interactive_session(api, router):
     print("Connecting to: Router %s" % router)
     print("Type ~~ rapidly to close session")
     w_save, h_save = None, None
-    res = 'remote/control/csterm/ecmcli-%s/' % api.sessionid
+    res = 'remote/control/csterm/ecmcli-%s/' % api.session_id
     in_data = '\n'
     poll_timeout = key_idle_timeout  # somewhat arbitrary
     while True:
@@ -118,7 +118,7 @@ def _interactive_session(api, router):
 def bulk_session(api, args, routers):
     command = '%s\n' % ' '.join(args.command)
     for rinfo in routers:
-        r = api.put('remote/control/csterm/ecmcli-%s/k' % api.sessionid,
+        r = api.put('remote/control/csterm/ecmcli-%s/k' % api.session_id,
                     command, id=rinfo['id'])[0]
         print()
         print("%s (%s):" % (rinfo['name'], rinfo['id']))

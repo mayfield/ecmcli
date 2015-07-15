@@ -4,68 +4,47 @@ ECM Command Line Interface
 
 import argparse
 import collections
+import importlib
 import logging
 import sys
-from . import api
-from .commands import (
-    accounts,
-    alerts,
-    flashleds,
-    groups,
-    logs,
-    ls,
-    reboot,
-    settings,
-    shell,
-    users,
-    wanrate,
-)
+from . import api, commands
 
 # logging.basicConfig(level=0)
 
 routers_parser = argparse.ArgumentParser(add_help=False)
-routers_parser.add_argument('--routers', nargs='+')
+routers_parser.add_argument('--routers', nargs='+', metavar="ID_OR_NAME")
 
 main_parser = argparse.ArgumentParser(description='ECM Command Line Interface')
-subs = main_parser.add_subparsers(title='SUBCOMMANDS',
-                                  description='Valid Subcommands')
+sub_desc = 'Provide a subcommand (below) to perform an ECM operation.'
+subs = main_parser.add_subparsers(title='subcommands', description=sub_desc,
+                                  metavar='SUBCOMMAND', help='Usage')
 main_parser.add_argument('--username')
 main_parser.add_argument('--password')
+main_parser.add_argument('--account')
 
-p = subs.add_parser('settings', parents=[settings.parser])
-p.set_defaults(invoke=settings.command)
 
-p = subs.add_parser('logs', parents=[routers_parser, logs.parser])
-p.set_defaults(invoke=logs.command, get_routers=True)
+def add_command(name, parents=None, **defaults):
+    module = importlib.import_module('.%s' % name, 'ecmcli.commands')
+    if not parents:
+        parents = []
+    try:
+        help = module.parser.format_usage().split(' ', 2)[2]
+    except IndexError:
+        help = ''
+    p = subs.add_parser(name, parents=parents+[module.parser], help=help)
+    p.set_defaults(invoke=module.command, **defaults)
 
-p = subs.add_parser('flashleds', parents=[routers_parser,
-                    flashleds.parser])
-p.set_defaults(invoke=flashleds.command, get_routers=True)
-
-p = subs.add_parser('reboot', parents=[routers_parser, reboot.parser])
-p.set_defaults(invoke=reboot.command, get_routers=True)
-
-p = subs.add_parser('wanrate', parents=[routers_parser, wanrate.parser])
-p.set_defaults(invoke=wanrate.command, get_routers=True)
-
-p = subs.add_parser('shell', parents=[routers_parser, shell.parser])
-p.set_defaults(invoke=shell.command, get_routers=True)
-
-p = subs.add_parser('ls', parents=[ls.parser])
-p.set_defaults(invoke=ls.command, get_routers=True)
-
-p = subs.add_parser('alerts', parents=[routers_parser, alerts.parser])
-p.set_defaults(invoke=alerts.command)
-
-p = subs.add_parser('users', parents=[users.parser])
-p.set_defaults(invoke=users.command)
-
-p = subs.add_parser('groups', parents=[groups.parser])
-p.set_defaults(invoke=groups.command)
-
-p = subs.add_parser('accounts', parents=[accounts.parser])
-p.set_defaults(invoke=accounts.command)
-
+add_command('settings')
+add_command('logs', parents=[routers_parser], get_routers=True)
+add_command('flashleds', parents=[routers_parser], get_routers=True)
+add_command('reboot', parents=[routers_parser], get_routers=True)
+add_command('wanrate', parents=[routers_parser], get_routers=True)
+add_command('shell', parents=[routers_parser], get_routers=True)
+add_command('ls', get_routers=True)
+add_command('alerts', parents=[routers_parser], get_routers=True)
+add_command('users')
+add_command('groups')
+add_command('accounts')
 
 def main():
     args = main_parser.parse_args()
@@ -73,10 +52,27 @@ def main():
         main_parser.print_usage()
         exit(1)
     ecmapi = api.ECMService(username=args.username, password=args.password)
+    if args.account:
+        try:
+            ecmapi.account = int(args.account)
+        except ValueError:
+            accounts = ecmapi.get('accounts', fields='id', name=args.account)
+            ecmapi.account = accounts[0]['id']
     options = {}
     if getattr(args, 'get_routers', False):
-        filters = {"id__in": ','.join(map(str, args.routers))} \
-                  if getattr(args, 'routers', None) else {}
+        filters = {}
+        if getattr(args, 'routers', None):
+            id_filters = []
+            name_filters = []
+            for x in args.routers:
+                try:
+                    id_filters.append(str(int(x)))
+                except ValueError:
+                    name_filters.append(x)
+            if id_filters:
+                filters["id__in"] = ','.join(id_filters)
+            if name_filters:
+                filters["name__in"] = ','.join(name_filters)
         routers = ecmapi.get_pager('routers', **filters)
         if not routers:
             print("WARNING: No Routers Found", file=sys.stderr)

@@ -9,7 +9,6 @@ parser.add_argument('-v', '--verbose', action='store_true',
                     help="Verbose output.")
 
 
-
 def command(api, args):
     printer = verbose_printer if args.verbose else terse_printer
     printer(api=api)

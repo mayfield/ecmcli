@@ -38,6 +38,7 @@ class ECMService(syndicate.Service):
     session_file = os.path.expanduser('~/.ecmcli_session')
 
     def __init__(self, username=None, password=None):
+        self.account = None
         self.load_session()
         # Eventually auth sig could be based on an api token too.
         auth_sig = username and hashlib.sha1(username.encode()).hexdigest()
@@ -95,6 +96,8 @@ class ECMService(syndicate.Service):
 
     def do(self, *args, **kwargs):
         """ Wrap some session and error handling around all API actions. """
+        if self.account is not None:
+            kwargs['account'] = self.account
         try:
             result = super().do(*args, **kwargs)
         except syndicate.client.ResponseError as e:
