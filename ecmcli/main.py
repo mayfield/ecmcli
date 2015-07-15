@@ -1,11 +1,16 @@
 """
 ECM Command Line Interface
+
+This utility represents a collection of sub-commands to perform against the
+Cradlepoint ECM service.  You must already have a valid ECM username/password
+to use this tool.  For more info go to https://cradlepointecm.com/.
 """
 
 import argparse
 import collections
 import importlib
 import logging
+import pkg_resources
 import sys
 from . import api, commands
 
@@ -14,14 +19,18 @@ from . import api, commands
 routers_parser = argparse.ArgumentParser(add_help=False)
 routers_parser.add_argument('--routers', nargs='+', metavar="ID_OR_NAME")
 
-main_parser = argparse.ArgumentParser(description='ECM Command Line Interface')
-sub_desc = 'Provide a subcommand (below) to perform an ECM operation.'
+raw_formatter = argparse.RawDescriptionHelpFormatter
+distro = pkg_resources.get_distribution('ecmcli')
+main_parser = argparse.ArgumentParser(description=__doc__,
+                                      formatter_class=raw_formatter,
+                                      epilog='VERSION: %s' % distro.version)
+sub_desc = 'Provide a subcommand argument (below) to perform an operation.'
 subs = main_parser.add_subparsers(title='subcommands', description=sub_desc,
                                   metavar='SUBCOMMAND', help='Usage')
 main_parser.add_argument('--username')
 main_parser.add_argument('--password')
 main_parser.add_argument('--account')
-
+main_parser.add_argument('--version', action='version', version=distro.version)
 
 def add_command(name, parents=None, **defaults):
     module = importlib.import_module('.%s' % name, 'ecmcli.commands')
@@ -45,6 +54,7 @@ add_command('alerts', parents=[routers_parser], get_routers=True)
 add_command('users')
 add_command('groups')
 add_command('accounts')
+
 
 def main():
     args = main_parser.parse_args()
