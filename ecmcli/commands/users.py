@@ -5,7 +5,7 @@ List/Edit/Manage ECM Users.
 import argparse
 import getpass
 
-roll_choices = ['admin', 'full', 'readonly']
+role_choices = ['admin', 'full', 'readonly']
 
 parser = argparse.ArgumentParser(add_help=False)
 commands = parser.add_subparsers()
@@ -17,14 +17,13 @@ edit_cmd = commands.add_parser('edit')
 create_cmd.add_argument('--email')
 create_cmd.add_argument('--password')
 create_cmd.add_argument('--fullname')
-create_cmd.add_argument('--role', choices=roll_choices)
+create_cmd.add_argument('--role', choices=role_choices)
 
 edit_cmd.add_argument('USERNAME')
 edit_cmd.add_argument('--username')
 edit_cmd.add_argument('--email')
 edit_cmd.add_argument('--password')
 edit_cmd.add_argument('--fullname')
-edit_cmd.add_argument('--role', choices=roll_choices)
 
 delete_cmd.add_argument('USERNAME')
 delete_cmd.add_argument('-f', '--force', action="store_true",
@@ -53,7 +52,7 @@ def create(api, args):
     password = args.password or getpass.getpass()
     name = (args.fullname or input('Full Name: ')).split()
     last_name = name.pop() if len(name) > 1 else None
-    role = args.role or input('Role {%s}: ' % ', '.join(roll_choices))
+    role = args.role or input('Role {%s}: ' % ', '.join(role_choices))
     role_id = {
         'admin': 1,
         'full': 2,
