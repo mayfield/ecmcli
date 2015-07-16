@@ -87,5 +87,5 @@ def verbose_printer(routers, api=None):
 def terse_printer(routers, api=None):
     fmt = '%(name)-20s %(id)6s %(ip_address)16s %(state)8s (%(since)s)'
     for x in routers:
-        x['since'] = since(x['state_ts'])
+        x['since'] = x['state_ts'] and since(x['state_ts'])
         print(fmt % x)
