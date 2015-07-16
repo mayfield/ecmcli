@@ -22,8 +22,7 @@ routers_parser.add_argument('--routers', nargs='+', metavar="ID_OR_NAME")
 raw_formatter = argparse.RawDescriptionHelpFormatter
 distro = pkg_resources.get_distribution('ecmcli')
 main_parser = argparse.ArgumentParser(description=__doc__,
-                                      formatter_class=raw_formatter,
-                                      epilog='VERSION: %s' % distro.version)
+                                      formatter_class=raw_formatter)
 sub_desc = 'Provide a subcommand argument (below) to perform an operation.'
 subs = main_parser.add_subparsers(title='subcommands', description=sub_desc,
                                   metavar='SUBCOMMAND', help='Usage')
@@ -91,4 +90,10 @@ def main():
     try:
         args.invoke(ecmapi, args, **options)
     except KeyboardInterrupt:
-        exit(1)
+        pass
+    except ReferenceError as e:
+        print('ERROR:', e)
+        main_parser.print_usage()
+    else:
+        exit(0)
+    exit(1)

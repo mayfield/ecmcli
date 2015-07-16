@@ -6,12 +6,14 @@ alterations we make to API calls, such as filtering by router ids.
 import getpass
 import hashlib
 import html
+import html.parser
 import json
 import os
 import syndicate
 import syndicate.client
 import syndicate.data
 import sys
+import tempfile
 from syndicate.adapters.sync import LoginAuth
 
 class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
@@ -22,6 +24,54 @@ class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
             if isinstance(value, str):
                 data[key] = html.unescape(value)
         return data
+
+
+class TOSParser(html.parser.HTMLParser):
+
+    end = '\033[0m'
+    tags = {
+        'b': ('\033[1m', end),
+        'h2': ('\n\033[1m', end+'\n'),
+        'h1': ('\n\033[1m', end+'\n'),
+        'ul': ('\033[4m', end),
+        'p': ('\n', '\n')
+    }
+    ignore = [
+        'style',
+        'script',
+        'head'
+    ]
+
+    def __init__(self):
+        self.fmt_stack = []
+        self.ignore_stack = []
+        self.buf = []
+        super().__init__()
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.tags:
+            start, end = self.tags[tag]
+            self.buf.append(start)
+            self.fmt_stack.append((tag, end))
+        if tag in self.ignore:
+            self.ignore_stack.append(tag)
+
+    def handle_endtag(self, tag):
+        if self.fmt_stack and tag == self.fmt_stack[-1][0]:
+            self.buf.append(self.fmt_stack.pop()[1])
+        elif self.ignore_stack and tag == self.ignore_stack[-1]:
+            self.ignore_stack.pop()
+
+    def handle_data(self, data):
+        if not self.ignore_stack:
+            self.buf.append(data.replace('\n', ' '))
+
+    def pager(self):
+        with tempfile.NamedTemporaryFile() as f:
+            for x in self.buf:
+                f.write(x.encode())
+            os.system('cat %s | more' % f.name)
+        del self.buf[:]
 
 
 syndicate.data.serializers['htmljson'] = syndicate.data.Serializer(
@@ -102,11 +152,19 @@ class ECMService(syndicate.Service):
             result = super().do(*args, **kwargs)
         except syndicate.client.ResponseError as e:
             self.handle_error(e)
+            # Retry if handle_error did not exit.
+            result = super().do(*args, **kwargs)
         self.check_session()
         return result
 
     def handle_error(self, error):
         """ Pretty print error messages and exit. """
+        if error.response['exception'] == 'precondition_failed' and \
+           error.response['message'] == 'must_accept_tos':
+            if self.accept_tos():
+                return
+            print("\nWARNING: User did not accept terms.")
+            exit(1)
         print('Response ERROR: ', file=sys.stderr)
         for key, val in sorted(error.response.items()):
             print("  %-20s: %s" % (key.capitalize(),
@@ -115,3 +173,19 @@ class ECMService(syndicate.Service):
             if self.reset_session():
                 print('WARNING: Flushed session state', file=sys.stderr)
         exit(1)
+
+    def accept_tos(self):
+        tos_parser = TOSParser()
+        for tos in self.get_pager('system_message', type='tos'):
+            tos_parser.feed(tos['message'])
+            input("You must read and accept the terms of service to " \
+                  "continue: <press enter>")
+            tos_parser.pager()
+            print()
+            accept = input('Type "accept" to comply with this TOS: ')
+            if accept != 'accept':
+                return False
+            self.post('system_message_confirm', {
+                "message": tos['resource_uri']
+            })
+            return True

@@ -4,83 +4,56 @@ List/Edit/Manage ECM Users.
 
 import argparse
 import getpass
-from html.parser import HTMLParser
 
 parser = argparse.ArgumentParser(add_help=False)
-parser.add_argument('-c', '--create', action='store_true',
-                    help="Create new user.")
-parser.add_argument('-e', '--edit', action='store_true',
-                    help="Edit existing user.")
-parser.add_argument('-d', '--delete', action='store_true',
-                    help="Delete user.")
-parser.add_argument('-v', '--verbose', action='store_true',
-                    help="Verbose output.")
+commands = parser.add_subparsers()
+show_cmd = commands.add_parser('show')
+create_cmd = commands.add_parser('create')
+delete_cmd = commands.add_parser('delete')
+edit_cmd = commands.add_parser('edit')
+
+create_cmd.add_argument('--email')
+create_cmd.add_argument('--password')
+create_cmd.add_argument('--fullname')
+create_cmd.add_argument('--role', choices=['admin', 'full', 'readonly'])
+
+edit_cmd.add_argument('USERNAME')
+edit_cmd.add_argument('--email')
+edit_cmd.add_argument('--password')
+edit_cmd.add_argument('--fullname')
+roll_choices = ['admin', 'full', 'readonly']
+edit_cmd.add_argument('--role', choices=roll_choices)
+
+delete_cmd.add_argument('USERNAME')
+
+show_cmd.add_argument('USERNAME', nargs='?')
+show_cmd.add_argument('-v', '--verbose', action='store_true',
+                      help="Verbose output.")
 
 
 def command(api, args):
-    if args.create:
-        return create_user(api)
-    elif args.edit:
-        return edit_user(api)
-    elif args.delete:
-        return delete_user(api)
-    else:
-        printer = verbose_printer if args.verbose else terse_printer
-        printer(api=api)
+    if not hasattr(args, 'cmd'):
+        raise ReferenceError('command argument required')
+    args.cmd(api, args)
 
 
-class TOSParser(HTMLParser):
+def show(api, args):
+    printer = verbose_printer if args.verbose else terse_printer
+    printer(api=api)
 
-    end = '\033[0m'
-    tags = {
-        'b': ('\033[1m', end),
-        'h2': ('\n\033[1m', end+'\n'),
-        'h1': ('\n\033[1m', end+'\n'),
-        'ul': ('\033[4m', end),
-        'p': ('\n', '\n')
-    }
-    ignore = [
-        'style',
-        'script',
-        'head'
-    ]
-
-    def __init__(self):
-        self.fmt_stack = []
-        self.ignore_stack = []
-        super().__init__()
-
-    def handle_starttag(self, tag, attrs):
-        if tag in self.tags:
-            start, end = self.tags[tag]
-            print(start, end='')
-            self.fmt_stack.append((tag, end))
-        if tag in self.ignore:
-            self.ignore_stack.append(tag)
-
-    def handle_endtag(self, tag):
-        if self.fmt_stack and tag == self.fmt_stack[-1][0]:
-            print(self.fmt_stack.pop()[1], end='')
-        elif self.ignore_stack and tag == self.ignore_stack[-1]:
-            self.ignore_stack.pop()
-
-    def handle_data(self, data):
-        if not self.ignore_stack:
-            print(data.replace('\n', ' '), end='')
-
-tos_parser = TOSParser()
+show_cmd.set_defaults(cmd=show)
 
 
-def create_user(api):
-    username = input('Email: ')
-    password = getpass.getpass()
-    name = input('Full Name: ').split()
+def create(api, args):
+    username = args.email or input('Email: ')
+    password = args.password or getpass.getpass()
+    name = (args.fullname or input('Full Name: ')).split()
     last_name = name.pop() if len(name) > 1 else None
-    role = input('Role [a]dmin, [f]ull-access, [r]ead-only]: ')
+    role = args.role or input('Role {%s}: ' % ', '.join(roll_choices))
     role_id = {
-        'a': 1,
-        'f': 2,
-        'r': 3
+        'admin': 1,
+        'full': 2,
+        'readonly': 3
     }.get(role)
     if not role_id:
         print("Invalid role selection")
@@ -95,31 +68,27 @@ def create_user(api):
     api.put('profiles', user['profile']['id'], {
         "require_password_change": False
     })
-    print()
     api.post('authorizations', {
         "account": user['profile']['account'],
         "cascade": True,
         "role": '/api/v1/roles/%d/' % role_id,
         "user": user['resource_uri']
     })
-    for x in api.get_pager('system_message', type='tos'):
-        tos_parser.feed(x['message'])
-        print()
-        accept = input('Type "accept" to comply with this TOS: ')
-        if accept != 'accept':
-            print("WARNING: User not activated")
-            return
-        api.post('system_message_confirm', {
-            "message": x['resource_uri']
-        })
+    print("Created user: %s" % user['username'])
+
+create_cmd.set_defaults(cmd=create)
 
 
-def edit_user(api):
+def edit(api, args):
     print("EDIT")
 
+edit_cmd.set_defaults(cmd=edit)
 
-def delete_user(api):
+
+def delete(api, args):
     print("DELETE")
+
+delete_cmd.set_defaults(cmd=delete)
 
 
 def verbose_printer(api=None):
