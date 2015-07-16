@@ -53,12 +53,13 @@ add_command('alerts', parents=[routers_parser], get_routers=True)
 add_command('users')
 add_command('groups')
 add_command('accounts')
+add_command('config', parents=[routers_parser], get_routers=True)
 
 
 def main():
     args = main_parser.parse_args()
     if not hasattr(args, 'invoke'):
-        main_parser.print_usage()
+        main_parser.print_help()
         exit(1)
     ecmapi = api.ECMService(username=args.username, password=args.password)
     if args.account:
