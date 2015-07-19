@@ -16,6 +16,7 @@ import sys
 import tempfile
 from syndicate.adapters.sync import LoginAuth
 
+
 class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
 
     def parse_object(self, data):
@@ -189,3 +190,18 @@ class ECMService(syndicate.Service):
                 "message": tos['resource_uri']
             })
             return True
+
+    def search(self, resource, fields, criteria, match='icontains'):
+        query = [('%s__%s' % (x, match), criteria) for x in fields]
+        terms = ['='.join(x) for x in query]
+        return self.get_pager(resource, _or='|'.join(terms))
+
+    def get_by_id_or_name(self, resource, id_or_name, **options):
+        try:
+            options['id'] = int(id_or_name)
+        except ValueError:
+            options['name'] = id_or_name
+        try:
+            return self.get(resource, **options)[0]
+        except IndexError:
+            return None

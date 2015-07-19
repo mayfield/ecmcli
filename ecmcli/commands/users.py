@@ -13,6 +13,8 @@ show_cmd = commands.add_parser('show')
 create_cmd = commands.add_parser('create')
 delete_cmd = commands.add_parser('delete')
 edit_cmd = commands.add_parser('edit')
+move_cmd = commands.add_parser('move')
+search_cmd = commands.add_parser('search')
 
 create_cmd.add_argument('--email')
 create_cmd.add_argument('--password')
@@ -25,6 +27,9 @@ edit_cmd.add_argument('--email')
 edit_cmd.add_argument('--password')
 edit_cmd.add_argument('--fullname')
 
+move_cmd.add_argument('USERNAME')
+move_cmd.add_argument('NEW_ACCOUNT_ID_OR_NAME')
+
 delete_cmd.add_argument('USERNAME')
 delete_cmd.add_argument('-f', '--force', action="store_true",
                         help="Do not prompt for confirmation")
@@ -32,6 +37,10 @@ delete_cmd.add_argument('-f', '--force', action="store_true",
 show_cmd.add_argument('USERNAME', nargs='?')
 show_cmd.add_argument('-v', '--verbose', action='store_true',
                       help="Verbose output.")
+
+search_cmd.add_argument('SEARCH_CRITERIA', nargs='+')
+search_cmd.add_argument('-v', '--verbose', action='store_true',
+                        help="Verbose output.")
 
 
 def command(api, args):
@@ -42,7 +51,10 @@ def command(api, args):
 
 def show(api, args):
     printer = verbose_printer if args.verbose else terse_printer
-    printer(api=api)
+    if not args.verbose:
+        printer(None, header=True)
+    for x in get_users(api):
+        printer(x)
 
 show_cmd.set_defaults(cmd=show)
 
@@ -82,7 +94,7 @@ create_cmd.set_defaults(cmd=create)
 
 
 def get_user(api, username):
-    user = api.get('users', username=username)
+    user = api.get('users', username=username, expand='profile.account')
     if not user:
         print("Invalid Username")
         exit(1)
@@ -118,8 +130,8 @@ edit_cmd.set_defaults(cmd=edit)
 def delete(api, args):
     user = get_user(api, args.USERNAME)
     if not args.force:
-        confirm =input('Delete user: %s, id:%s (type "yes" to confirm): ' % (
-                       args.USERNAME, user['id']))
+        confirm = input('Delete user: %s, id:%s (type "yes" to confirm): ' % (
+                        args.USERNAME, user['id']))
         if confirm != 'yes':
             print("Aborted")
             exit(1)
@@ -128,9 +140,36 @@ def delete(api, args):
 delete_cmd.set_defaults(cmd=delete)
 
 
-def get_users(api):
-    expand = ['profile', 'authorizations', 'authorizations.role']
-    for x in api.get_pager('users', expand=','.join(expand)):
+def move(api, args):
+    user = get_user(api, args.USERNAME)
+    account = api.get_by_id_or_name('accounts', args.NEW_ACCOUNT_ID_OR_NAME)
+    if not account:
+        print("Account Not Found:", args.NEW_ACCOUNT_ID_OR_NAME)
+        exit(1)
+    api.put('profiles', user['profile']['id'], {"account": account['resource_uri']})
+
+move_cmd.set_defaults(cmd=move)
+
+
+def search(api, args):
+    search = ' '.join(args.SEARCH_CRITERIA)
+    fields = ['username', 'first_name', 'last_name', 'email']
+    results = list(api.search('users', fields, search))
+    if not results:
+        print("No Results For:", search)
+        exit(1)
+    printer = verbose_printer if args.verbose else terse_printer
+    if not args.verbose:
+        printer(None, header=True)
+    for x in get_users(api, id__in=','.join(x['id'] for x in results)):
+        printer(x)
+
+search_cmd.set_defaults(cmd=search)
+
+
+def get_users(api, **filters):
+    expand = ['authorizations', 'authorizations.role', 'profile.account']
+    for x in api.get_pager('users', expand=','.join(expand), **filters):
         x['name'] = '%(first_name)s %(last_name)s' % x
         x['roles'] = ', '.join(xx['role']['name']
                                for xx in x['authorizations']
@@ -138,26 +177,31 @@ def get_users(api):
         yield x
 
 
-def verbose_printer(api=None):
-    for x in get_users(api):
-        print('Username:   ', x['username'])
-        print('Full Name:  ', x['name'])
-        print('Role(s):    ', x['roles'])
-        print('ID:         ', x['id'])
-        print('Email:      ', x['email'])
-        print('Joined:     ', x['date_joined'])
-        print('Last Login: ', x['last_login'])
-        print()
+def verbose_printer(user):
+    account = user['profile']['account']
+    print('Username:   ', user['username'])
+    print('Full Name:  ', user['name'])
+    print('Account:    ', account['name'], '(%s)' % account['id'])
+    print('Role(s):    ', user['roles'])
+    print('ID:         ', user['id'])
+    print('Email:      ', user['email'])
+    print('Joined:     ', user['date_joined'])
+    print('Last Login: ', user['last_login'])
+    print()
 
 
-def terse_printer(api=None):
-    fmt = '%(username)-28s %(name)-23s %(roles)-17s %(id)-6s %(email)s'
-    print(fmt % {
-        "username": 'USERNAME',
-        "name": 'FULL NAME',
-        "roles": 'ROLE(S)',
-        "id": 'ID',
-        "email": 'EMAIL'
-    })
-    for x in get_users(api):
-        print(fmt % x)
+def terse_printer(user, header=False):
+    if header:
+        user = {
+            "username": 'USERNAME',
+            "name": 'FULL NAME',
+            "account_desc": 'ACCOUNT',
+            "roles": 'ROLE(S)',
+            "id": 'ID',
+            "email": 'EMAIL'
+        }
+    else:
+        user = user.copy()
+        account = user['profile']['account']
+        user['account_desc'] = '%s (%s)' % (account['name'], account['id'])
+    print('%(username)-28s %(name)-23s %(account_desc)-21s %(roles)-17s %(id)-6s %(email)s' % user)

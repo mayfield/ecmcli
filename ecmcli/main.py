@@ -14,7 +14,7 @@ import pkg_resources
 import sys
 from . import api, commands
 
-# logging.basicConfig(level=0)
+#logging.basicConfig(level=0)
 
 routers_parser = argparse.ArgumentParser(add_help=False)
 routers_parser.add_argument('--routers', nargs='+', metavar="ID_OR_NAME")
@@ -31,6 +31,7 @@ main_parser.add_argument('--password')
 main_parser.add_argument('--account')
 main_parser.add_argument('--version', action='version', version=distro.version)
 
+
 def add_command(name, parents=None, **defaults):
     module = importlib.import_module('.%s' % name, 'ecmcli.commands')
     if not parents:
@@ -39,8 +40,9 @@ def add_command(name, parents=None, **defaults):
         help = module.parser.format_usage().split(' ', 2)[2]
     except IndexError:
         help = ''
+    module.parser.prog = '%s %s' % (main_parser.prog, name)
     p = subs.add_parser(name, parents=parents+[module.parser], help=help)
-    p.set_defaults(invoke=module.command, **defaults)
+    p.set_defaults(invoke=module.command, parser=module.parser, **defaults)
 
 add_command('settings')
 add_command('logs', parents=[routers_parser], get_routers=True)
@@ -67,7 +69,11 @@ def main():
             ecmapi.account = int(args.account)
         except ValueError:
             accounts = ecmapi.get('accounts', fields='id', name=args.account)
-            ecmapi.account = accounts[0]['id']
+            try:
+                ecmapi.account = accounts[0]['id']
+            except IndexError:
+                print("Error: Account not found:", args.account)
+                exit(1)
     options = {}
     if getattr(args, 'get_routers', False):
         filters = {}
@@ -93,8 +99,8 @@ def main():
     except KeyboardInterrupt:
         pass
     except ReferenceError as e:
-        print('ERROR:', e)
-        main_parser.print_usage()
+        print('ERROR:', e, '\n')
+        args.parser.print_help()
     else:
         exit(0)
     exit(1)
