@@ -196,7 +196,7 @@ class ECMService(syndicate.Service):
         terms = ['='.join(x) for x in query]
         return self.get_pager(resource, _or='|'.join(terms))
 
-    def get_by_id_or_name(self, resource, id_or_name, **options):
+    def get_by_id_or_name(self, resource, id_or_name, required=True, **options):
         try:
             options['id'] = int(id_or_name)
         except ValueError:
@@ -204,4 +204,9 @@ class ECMService(syndicate.Service):
         try:
             return self.get(resource, **options)[0]
         except IndexError:
-            return None
+            if required:
+                print("%s Not Found:" % resource[:-1].capitalize(),
+                      id_or_name)
+                exit(1)
+            else:
+                return None

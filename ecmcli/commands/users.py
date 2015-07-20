@@ -8,58 +8,63 @@ import getpass
 role_choices = ['admin', 'full', 'readonly']
 
 parser = argparse.ArgumentParser(add_help=False)
-commands = parser.add_subparsers()
-show_cmd = commands.add_parser('show')
-create_cmd = commands.add_parser('create')
-delete_cmd = commands.add_parser('delete')
-edit_cmd = commands.add_parser('edit')
-move_cmd = commands.add_parser('move')
-search_cmd = commands.add_parser('search')
+commands = parser.add_subparsers(dest='cmd')
+show_parser = commands.add_parser('show', help='Show users (DEFAULT)')
+create_parser = commands.add_parser('create', help='Create user')
+delete_parser = commands.add_parser('delete', help='Delete user')
+edit_parser = commands.add_parser('edit', help='Edit user attributes')
+move_parser = commands.add_parser('move', help='Move user to new account')
+search_parser = commands.add_parser('search', help='Search for user(s)')
 
-create_cmd.add_argument('--email')
-create_cmd.add_argument('--password')
-create_cmd.add_argument('--fullname')
-create_cmd.add_argument('--role', choices=role_choices)
+create_parser.add_argument('--email')
+create_parser.add_argument('--password')
+create_parser.add_argument('--fullname')
+create_parser.add_argument('--role', choices=role_choices)
 
-edit_cmd.add_argument('USERNAME')
-edit_cmd.add_argument('--username')
-edit_cmd.add_argument('--email')
-edit_cmd.add_argument('--password')
-edit_cmd.add_argument('--fullname')
+edit_parser.add_argument('USERNAME')
+edit_parser.add_argument('--username')
+edit_parser.add_argument('--email')
+edit_parser.add_argument('--password')
+edit_parser.add_argument('--fullname')
 
-move_cmd.add_argument('USERNAME')
-move_cmd.add_argument('NEW_ACCOUNT_ID_OR_NAME')
+move_parser.add_argument('USERNAME')
+move_parser.add_argument('NEW_ACCOUNT_ID_OR_NAME')
 
-delete_cmd.add_argument('USERNAME')
-delete_cmd.add_argument('-f', '--force', action="store_true",
+delete_parser.add_argument('USERNAME')
+delete_parser.add_argument('-f', '--force', action="store_true",
                         help="Do not prompt for confirmation")
 
-show_cmd.add_argument('USERNAME', nargs='?')
-show_cmd.add_argument('-v', '--verbose', action='store_true',
+show_parser.add_argument('USERNAME', nargs='?')
+show_parser.add_argument('-v', '--verbose', action='store_true',
                       help="Verbose output.")
 
-search_cmd.add_argument('SEARCH_CRITERIA', nargs='+')
-search_cmd.add_argument('-v', '--verbose', action='store_true',
-                        help="Verbose output.")
+search_parser.add_argument('SEARCH_CRITERIA', nargs='+')
+search_parser.add_argument('-v', '--verbose', action='store_true',
+                           help="Verbose output.")
 
 
 def command(api, args):
-    if not hasattr(args, 'cmd'):
-        raise ReferenceError('command argument required')
-    args.cmd(api, args)
+    if not args.cmd:
+        args.cmd = 'show'
+        args.verbose = False
+        args.USERNAME = None
+    cmd = globals()['%s_cmd' % args.cmd]
+    cmd(api, args)
 
 
-def show(api, args):
+def show_cmd(api, args):
     printer = verbose_printer if args.verbose else terse_printer
+    if args.USERNAME:
+        users = [get_user(api, args.USERNAME)]
+    else:
+        users = get_users(api)
     if not args.verbose:
         printer(None, header=True)
-    for x in get_users(api):
+    for x in users:
         printer(x)
 
-show_cmd.set_defaults(cmd=show)
 
-
-def create(api, args):
+def create_cmd(api, args):
     username = args.email or input('Email: ')
     password = args.password or getpass.getpass()
     name = (args.fullname or input('Full Name: ')).split()
@@ -90,18 +95,17 @@ def create(api, args):
         "user": user['resource_uri']
     })
 
-create_cmd.set_defaults(cmd=create)
-
 
 def get_user(api, username):
-    user = api.get('users', username=username, expand='profile.account')
+    expand = ['authorizations.role', 'profile.account']
+    user = api.get('users', username=username, expand=','.join(expand))
     if not user:
         print("Invalid Username")
         exit(1)
-    return user[0]
+    return bundle_user(user[0])
 
 
-def edit(api, args):
+def edit_cmd(api, args):
     user = get_user(api, args.USERNAME)
     username = args.username or input('Username [%s]: ' % user['username'])
     email = args.email or input('Email [%s]: ' % user['email'])
@@ -124,10 +128,8 @@ def edit(api, args):
         updates['last_name'] = last_name
     user = api.put('users', user['id'], updates)
 
-edit_cmd.set_defaults(cmd=edit)
 
-
-def delete(api, args):
+def delete_cmd(api, args):
     user = get_user(api, args.USERNAME)
     if not args.force:
         confirm = input('Delete user: %s, id:%s (type "yes" to confirm): ' % (
@@ -137,21 +139,14 @@ def delete(api, args):
             exit(1)
     api.delete('users', user['id'])
 
-delete_cmd.set_defaults(cmd=delete)
 
-
-def move(api, args):
+def move_cmd(api, args):
     user = get_user(api, args.USERNAME)
     account = api.get_by_id_or_name('accounts', args.NEW_ACCOUNT_ID_OR_NAME)
-    if not account:
-        print("Account Not Found:", args.NEW_ACCOUNT_ID_OR_NAME)
-        exit(1)
     api.put('profiles', user['profile']['id'], {"account": account['resource_uri']})
 
-move_cmd.set_defaults(cmd=move)
 
-
-def search(api, args):
+def search_cmd(api, args):
     search = ' '.join(args.SEARCH_CRITERIA)
     fields = ['username', 'first_name', 'last_name', 'email']
     results = list(api.search('users', fields, search))
@@ -164,17 +159,19 @@ def search(api, args):
     for x in get_users(api, id__in=','.join(x['id'] for x in results)):
         printer(x)
 
-search_cmd.set_defaults(cmd=search)
+
+def bundle_user(user):
+    user['name'] = '%(first_name)s %(last_name)s' % user
+    user['roles'] = ', '.join(x['role']['name']
+                              for x in user['authorizations']
+                              if x['role']['id'] != '4')
+    return user
 
 
 def get_users(api, **filters):
-    expand = ['authorizations', 'authorizations.role', 'profile.account']
+    expand = ['authorizations.role', 'profile.account']
     for x in api.get_pager('users', expand=','.join(expand), **filters):
-        x['name'] = '%(first_name)s %(last_name)s' % x
-        x['roles'] = ', '.join(xx['role']['name']
-                               for xx in x['authorizations']
-                               if xx['role']['id'] != '4')
-        yield x
+        yield bundle_user(x)
 
 
 def verbose_printer(user):

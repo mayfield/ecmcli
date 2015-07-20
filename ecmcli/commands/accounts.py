@@ -5,32 +5,33 @@ List ECM Accounts.
 import argparse
 
 parser = argparse.ArgumentParser(add_help=False)
-commands = parser.add_subparsers()
-show_cmd = commands.add_parser('show')
-create_cmd = commands.add_parser('create')
-delete_cmd = commands.add_parser('delete')
-move_cmd = commands.add_parser('move')
-rename_cmd = commands.add_parser('rename')
-search_cmd = commands.add_parser('search')
+commands = parser.add_subparsers(dest='cmd')
+show_parser = commands.add_parser('show', help='Show accounts (DEFAULT)')
+create_parser = commands.add_parser('create', help='Create account')
+delete_parser = commands.add_parser('delete', help='Delete account')
+move_parser = commands.add_parser('move', help='Move account to new parent '
+                                  'account')
+rename_parser = commands.add_parser('rename', help='Rename account')
+search_parser = commands.add_parser('search', help='Search for account(s)')
 
-show_cmd.add_argument('ID_OR_NAME', nargs='?')
-show_cmd.add_argument('-v', '--verbose', action='store_true')
+show_parser.add_argument('ACCOUNT_ID_OR_NAME', nargs='?')
+show_parser.add_argument('-v', '--verbose', action='store_true')
 
-create_cmd.add_argument('-p', '--parent', metavar="ID_OR_NAME")
-create_cmd.add_argument('NAME')
+create_parser.add_argument('-p', '--parent', metavar="ACCOUNT_ID_OR_NAME")
+create_parser.add_argument('NAME')
 
-delete_cmd.add_argument('ID_OR_NAME')
-delete_cmd.add_argument('-f', '--force')
+delete_parser.add_argument('ACCOUNT_ID_OR_NAME')
+delete_parser.add_argument('-f', '--force')
 
-move_cmd.add_argument('ID_OR_NAME')
-move_cmd.add_argument('NEW_PARENT_ID_OR_NAME')
-move_cmd.add_argument('-f', '--force')
+move_parser.add_argument('ACCOUNT_ID_OR_NAME')
+move_parser.add_argument('NEW_PARENT_ID_OR_NAME')
+move_parser.add_argument('-f', '--force')
 
-rename_cmd.add_argument('ID_OR_NAME')
-rename_cmd.add_argument('NEW_NAME')
+rename_parser.add_argument('ACCOUNT_ID_OR_NAME')
+rename_parser.add_argument('NEW_NAME')
 
-search_cmd.add_argument('SEARCH_CRITERIA', nargs='+')
-search_cmd.add_argument('-v', '--verbose', action='store_true')
+search_parser.add_argument('SEARCH_CRITERIA', nargs='+')
+search_parser.add_argument('-v', '--verbose', action='store_true')
 
 
 def confirm(msg):
@@ -40,23 +41,21 @@ def confirm(msg):
 
 
 def command(api, args):
-    if not hasattr(args, 'cmd'):
-        raise ReferenceError('command argument required')
-    args.cmd(api, args)
+    if not args.cmd:
+        args.cmd = 'show'
+        args.verbose = False
+        args.ACCOUNT_ID_OR_NAME = None
+    cmd = globals()['%s_cmd' % args.cmd]
+    cmd(api, args)
 
 
-def show(api, args):
-    if args.ID_OR_NAME:
-        return show_detail(api, args.ID_OR_NAME)
+def show_cmd(api, args):
+    if args.ACCOUNT_ID_OR_NAME:
+        account = api.get_by_id_or_name('accounts', args.ACCOUNT_ID_OR_NAME)
+        print(verbose_formatter(api, account))
+        exit(0)
     else:
         return show_tree(api, args)
-
-show_cmd.set_defaults(cmd=show)
-
-
-def show_detail(api, id_or_name):
-    for x in api.get_pager('accounts'):
-        print(fmt % x)
 
 
 def show_tree(api, args):
@@ -126,7 +125,7 @@ def account_tree(accounts, formatter, prefix=None):
             account_tree(x['children'], formatter, prefix=''.join(line))
 
 
-def create(api, args):
+def create_cmd(api, args):
     new_account = {
         "name": args.NAME
     }
@@ -138,40 +137,30 @@ def create(api, args):
         new_account['account'] = account['resource_uri']
     api.post('accounts', new_account)
 
-create_cmd.set_defaults(cmd=create)
 
-
-def delete(api, args):
-    account = api.get_by_id_or_name('accounts', args.ID_OR_NAME)
+def delete_cmd(api, args):
+    account = api.get_by_id_or_name('accounts', args.ACCOUNT_ID_OR_NAME)
     if not args.force:
         detail = verbose_formatter(api, account)
         confirm('Confirm account delete: %s' % detail)
     api.delete('accounts', account['id'])
 
-delete_cmd.set_defaults(cmd=delete)
 
-
-def move(api, args):
-    account = api.get_by_id_or_name('accounts', args.ID_OR_NAME)
+def move_cmd(api, args):
+    account = api.get_by_id_or_name('accounts', args.ACCOUNT_ID_OR_NAME)
     new_parent = api.get_by_id_or_name('accounts', args.NEW_PARENT_ID_OR_NAME)
     api.put('accounts', account['id'], {"account": new_parent['resource_uri']})
 
-move_cmd.set_defaults(cmd=move)
 
-
-def rename(api, args):
-    account = api.get_by_id_or_name('accounts', args.ID_OR_NAME)
+def rename_cmd(api, args):
+    account = api.get_by_id_or_name('accounts', args.ACCOUNT_ID_OR_NAME)
     api.put('accounts', account['id'], {"name": args.NEW_NAME})
 
-rename_cmd.set_defaults(cmd=rename)
 
-
-def search(api, args):
+def search_cmd(api, args):
     criteria = ' '.join(args.SEARCH_CRITERIA)
     results = api.search('accounts', ['name'], criteria)
     _verbose_formatter = lambda x: verbose_formatter(api, x)
     formatter = _verbose_formatter if args.verbose else terse_formatter
     for x in results:
         print(formatter(x))
-
-search_cmd.set_defaults(cmd=search)
