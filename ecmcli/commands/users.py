@@ -14,6 +14,7 @@ create_parser = commands.add_parser('create', help='Create user')
 delete_parser = commands.add_parser('delete', help='Delete user')
 edit_parser = commands.add_parser('edit', help='Edit user attributes')
 move_parser = commands.add_parser('move', help='Move user to new account')
+passwd_parser = commands.add_parser('passwd', help='Change user password')
 search_parser = commands.add_parser('search', help='Search for user(s)')
 
 create_parser.add_argument('--email')
@@ -24,23 +25,30 @@ create_parser.add_argument('--role', choices=role_choices)
 edit_parser.add_argument('USERNAME')
 edit_parser.add_argument('--username')
 edit_parser.add_argument('--email')
-edit_parser.add_argument('--password')
 edit_parser.add_argument('--fullname')
 
 move_parser.add_argument('USERNAME')
 move_parser.add_argument('NEW_ACCOUNT_ID_OR_NAME')
 
-delete_parser.add_argument('USERNAME')
+passwd_parser.add_argument('USERNAME')
+
+delete_parser.add_argument('USERNAME', nargs='+')
 delete_parser.add_argument('-f', '--force', action="store_true",
-                        help="Do not prompt for confirmation")
+                           help="Do not prompt for confirmation")
 
 show_parser.add_argument('USERNAME', nargs='?')
 show_parser.add_argument('-v', '--verbose', action='store_true',
-                      help="Verbose output.")
+                         help="Verbose output.")
 
 search_parser.add_argument('SEARCH_CRITERIA', nargs='+')
 search_parser.add_argument('-v', '--verbose', action='store_true',
                            help="Verbose output.")
+
+
+def splitname(fullname):
+    name = fullname.rsplit(' ', 1)
+    last_name = name.pop() if len(name) > 1 else ''
+    return name[0], last_name
 
 
 def command(api, args):
@@ -67,8 +75,7 @@ def show_cmd(api, args):
 def create_cmd(api, args):
     username = args.email or input('Email: ')
     password = args.password or getpass.getpass()
-    name = (args.fullname or input('Full Name: ')).split()
-    last_name = name.pop() if len(name) > 1 else None
+    name = splitname(args.fullname or input('Full Name: '))
     role = args.role or input('Role {%s}: ' % ', '.join(role_choices))
     role_id = {
         'admin': 1,
@@ -81,8 +88,8 @@ def create_cmd(api, args):
     user = api.post('users', {
         "username": username,
         "email": username,
-        "first_name": ' '.join(name),
-        "last_name": last_name,
+        "first_name": name[0],
+        "last_name": name[1],
         "password": password
     }, expand='profile')
     api.put('profiles', user['profile']['id'], {
@@ -107,43 +114,48 @@ def get_user(api, username):
 
 def edit_cmd(api, args):
     user = get_user(api, args.USERNAME)
-    username = args.username or input('Username [%s]: ' % user['username'])
-    email = args.email or input('Email [%s]: ' % user['email'])
-    prompt = 'Password [enter for no change]: '
-    password = args.password or getpass.getpass(prompt)
-    prompt = 'Full Name [%s %s]: ' % (user['first_name'], user['last_name'])
-    name = (args.fullname or input(prompt)).split()
-    last_name = name.pop() if len(name) > 1 else ''
     updates = {}
-    if username:
-        updates['username'] = username
-    if email:
-        updates['email'] = email
-    if password:
-        updates['password'] = password
-        updates['current_password'] = getpass.getpass('Current Password ' \
-                                                      'Required: ')
-    if name:
-        updates['first_name'] = name[0]
-        updates['last_name'] = last_name
-    user = api.put('users', user['id'], updates)
+    if args.fullname:
+        first, last = splitname(args.fullname)
+        updates['first_name'] = first
+        updates['last_name'] = last
+    if args.username:
+        updates['username'] = args.username
+    if args.email:
+        updates['email'] = args.email
+    print(updates)
+    api.put('users', user['id'], updates)
 
 
 def delete_cmd(api, args):
-    user = get_user(api, args.USERNAME)
-    if not args.force:
-        confirm = input('Delete user: %s, id:%s (type "yes" to confirm): ' % (
-                        args.USERNAME, user['id']))
-        if confirm != 'yes':
-            print("Aborted")
-            exit(1)
-    api.delete('users', user['id'])
+    for username in args.USERNAME:
+        user = get_user(api, username)
+        if not args.force:
+            confirm = input('Delete user: %s, id:%s (type "yes" to confirm): '
+                            % (username, user['id']))
+            if confirm != 'yes':
+                print("Aborted")
+                continue
+        api.delete('users', user['id'])
 
 
 def move_cmd(api, args):
     user = get_user(api, args.USERNAME)
     account = api.get_by_id_or_name('accounts', args.NEW_ACCOUNT_ID_OR_NAME)
     api.put('profiles', user['profile']['id'], {"account": account['resource_uri']})
+
+
+def passwd_cmd(api, args):
+    user = get_user(api, args.USERNAME)
+    update = {
+        "current_password": getpass.getpass('Current Password: '),
+        "password": getpass.getpass('New Password: '),
+        "password2": getpass.getpass('New Password (confirm): ')
+    }
+    if update['password'] != update.pop('password2'):
+        print("Aborted: passwords do not match")
+        exit(1)
+    api.put('users', user['id'], update)
 
 
 def search_cmd(api, args):

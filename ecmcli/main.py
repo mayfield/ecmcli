@@ -44,18 +44,18 @@ def add_command(name, parents=None, **defaults):
     p = subs.add_parser(name, parents=parents+[module.parser], help=help)
     p.set_defaults(invoke=module.command, parser=module.parser, **defaults)
 
-add_command('settings')
-add_command('logs', parents=[routers_parser], get_routers=True)
-add_command('flashleds', parents=[routers_parser], get_routers=True)
-add_command('reboot', parents=[routers_parser], get_routers=True)
-add_command('wanrate', parents=[routers_parser], get_routers=True)
-add_command('shell', parents=[routers_parser], get_routers=True)
-add_command('routers', get_routers=True)
-add_command('alerts', parents=[routers_parser], get_routers=True)
-add_command('users')
-add_command('groups')
 add_command('accounts')
+add_command('alerts', parents=[routers_parser], get_routers=True)
 add_command('config', parents=[routers_parser], get_routers=True)
+add_command('flashleds', parents=[routers_parser], get_routers=True)
+add_command('groups')
+add_command('logs', parents=[routers_parser], get_routers=True)
+add_command('reboot', parents=[routers_parser], get_routers=True)
+add_command('routers')
+add_command('settings')
+add_command('shell', parents=[routers_parser], get_routers=True)
+add_command('users')
+add_command('wanrate', parents=[routers_parser], get_routers=True)
 
 
 def main():

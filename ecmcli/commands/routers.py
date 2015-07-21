@@ -3,7 +3,6 @@ Manage ECM Routers.
 """
 
 import argparse
-import functools
 import humanize
 
 parser = argparse.ArgumentParser(add_help=False)
@@ -35,39 +34,48 @@ groupassign_parser.add_argument('NEW_GROUP_ID_OR_NAME')
 
 groupunassign_parser.add_argument('ROUTER_ID_OR_NAME')
 
-delete_parser.add_argument('ROUTER_ID_OR_NAME')
+delete_parser.add_argument('ROUTER_ID_OR_NAME', nargs='+')
 delete_parser.add_argument('-f', '--force', action="store_true",
-                        help="Do not prompt for confirmation")
+                           help="Do not prompt for confirmation")
 
 show_parser.add_argument('ROUTER_ID_OR_NAME', nargs='?')
 show_parser.add_argument('-v', '--verbose', action='store_true',
-                      help="Verbose output.")
+                         help="Verbose output.")
 
 search_parser.add_argument('SEARCH_CRITERIA', nargs='+')
 search_parser.add_argument('-v', '--verbose', action='store_true',
-                        help="Verbose output.")
+                           help="Verbose output.")
 
 
-def command(api, args, routers=None):
+def command(api, args):
     if not args.cmd:
         args.cmd = 'show'
         args.verbose = False
         args.ROUTER_ID_OR_NAME = None
     cmd = globals()['%s_cmd' % args.cmd]
-    cmd(api, args, routers=routers)
+    cmd(api, args)
 
 
-def show_cmd(api, args, routers=None):
+def show_cmd(api, args):
+    expand = [
+        'account',
+        'group'
+    ]
+    if args.verbose:
+        expand.extend([
+            'group',
+            'product',
+            'actual_firmware',
+            'last_known_location',
+            'featurebindings'
+        ])
     if args.ROUTER_ID_OR_NAME:
-        routers = [api.get_by_id_or_name('routers', args.ROUTER_ID_OR_NAME)]
+        routers = [api.get_by_id_or_name('routers', args.ROUTER_ID_OR_NAME,
+                   expand=','.join(expand))]
+    else:
+        routers = api.get_pager('routers', expand=','.join(expand))
     printer = verbose_printer if args.verbose else terse_printer
     printer(routers, api=api)
-
-
-@functools.lru_cache(maxsize=2^16)
-def res_fetch(api, urn):
-    """ Return a remote ECM resource by urn. (NOTE: MEMOIZING) """
-    return api.get(urn=urn)
 
 
 def since(dt):
@@ -79,79 +87,87 @@ def since(dt):
 
 
 def verbose_printer(routers, api=None):
-    fields = (
-        ('account_info', 'Account'),
-        ('asset_id', 'Asset ID'),
-        ('config_status', 'Config Status'),
-        ('custom1', 'Custom 1'),
-        ('custom2', 'Custom 2'),
-        ('desc', 'Description'),
-        ('entitlements', 'Entitlements'),
-        ('firmware_info', 'Firmware'),
-        ('group_info', 'Group'),
-        ('id', 'ID'),
-        ('ip_address', 'IP Address'),
-        ('joined', 'Joined'),
-        ('locality', 'Locality'),
-        ('location_info', 'Location'),
-        ('mac', 'MAC'),
-        ('product_info', 'Product'),
-        ('quarantined', 'Quarantined'),
-        ('serial_number', 'Serial Number'),
-        ('since', 'Connection Time'),
-        ('state', 'Connection'),
-    )
+    fields = {
+        'account_info': 'Account',
+        'asset_id': 'Asset ID',
+        'config_status': 'Config Status',
+        'custom1': 'Custom 1',
+        'custom2': 'Custom 2',
+        'desc': 'Description',
+        'entitlements': 'Entitlements',
+        'firmware_info': 'Firmware',
+        'group_info': 'Group',
+        'id': 'ID',
+        'ip_address': 'IP Address',
+        'joined': 'Joined',
+        'locality': 'Locality',
+        'location_info': 'Location',
+        'mac': 'MAC',
+        'name': 'Name',
+        'product_info': 'Product',
+        'quarantined': 'Quarantined',
+        'serial_number': 'Serial Number',
+        'since': 'Connection Time',
+        'state': 'Connection',
+        'dashboard_url': 'Dashboard URL'
+    }
     location_url = 'https://maps.google.com/maps?' \
                    'q=loc:%(latitude)f+%(longitude)f'
-    offset = max(map(len, (x[1] for x in fields))) + 2
-    fmt = '\t%%-%ds: %%s' % offset
+    offset = max(map(len, fields.values())) + 2
+    fmt = '%%-%ds: %%s' % offset
     first = True
     for x in routers:
-
-        def fetch_sub(subres):
-            return x.get(subres) and res_fetch(api, x[subres])
-
-        def fetch_sub_name_and_id(subres):
-            sub = fetch_sub(subres)
-            return sub and '%s (%s)' % (sub['name'], sub['id'])
-
-        if not first:
+        if first:
+            first = False
+        else:
             print()
-        print('%s (%s):' % (x['name'], x['id']))
+        print('*' * 10, '%s (%s) - %s - %s' % (x['name'], x['id'], x['mac'],
+              x['ip_address']), '*' * 10)
         x['since'] = since(x['state_ts'])
         x['joined'] = since(x['create_ts']) + ' ago'
-        x['account_info'] = fetch_sub_name_and_id('account')
-        x['group_info'] = fetch_sub_name_and_id('group')
-        x['product_info'] = fetch_sub_name_and_id('product')
-        fw = fetch_sub('actual_firmware')
-        x['firmware_info'] = fw['version'] if fw else 'Unsupported'
-        loc = fetch_sub('last_known_location')
-        x['location_info'] = loc and location_url % loc
-        ents = fetch_sub('featurebindings')
+        x['account_info'] = '%s (%s)' % (x['account']['name'], x['account']['id'])
+        x['group_info'] = x['group']['name'] if x['group'] else ''
+        x['product_info'] = x['product']['name']
+        fw = x['actual_firmware']
+        x['firmware_info'] = fw['version'] if fw else '<unsupported>'
+        loc = x.get('last_known_location')
+        x['location_info'] = location_url % loc if loc else ''
+        ents = x['featurebindings']
         acc = lambda x: x['settings']['entitlement'] \
                          ['sf_entitlements'][0]['name']
-        x['entitlements'] = ', '.join(map(acc, ents)) if ents else 'None'
-        for key, label in fields:
+        x['entitlements'] = ', '.join(map(acc, ents)) if ents else ''
+        x['dashboard_url'] = 'https://cradlepointecm.com/ecm.html#devices/' \
+                             'dashboard?id=%s' % x['id']
+        for key, label in sorted(fields.items(), key=lambda x: x[1]):
             print(fmt % (label, x[key]))
-        first = False
 
 
 def terse_printer(routers, api=None):
-    fmt = '%(name)-20s %(id)6s %(ip_address)16s %(state)8s (%(since)s)'
+    fmt = '%(name_info)-24s %(account_name)-18s %(group_name)-22s ' \
+          '%(ip_address)-16s %(state)s'
+    print(fmt % {
+        "name_info": "NAME (ID)",
+        "account_name": "ACCOUNT",
+        "group_name": "GROUP",
+        "ip_address": "IP ADDRESS",
+        "state": "CONN"
+    })
     for x in routers:
-        x['since'] = x['state_ts'] and since(x['state_ts'])
+        x['name_info'] = '%s (%s)' % (x['name'], x['id'])
+        x['account_name'] = x['account']['name']
+        x['group_name'] = x['group']['name'] if x['group'] else ''
         print(fmt % x)
 
 
-def groupassign_cmd(api, args, routers=None):
+def groupassign_cmd(api, args):
     pass
 
 
-def groupunassign_cmd(api, args, routers=None):
+def groupunassign_cmd(api, args):
     pass
 
 
-def edit_cmd(api, args, routers=None):
+def edit_cmd(api, args):
     router = api.get_by_id_or_name('routers', args.ROUTER_ID_OR_NAME)
     value = {}
     fields = ['name', 'desc', 'asset_id', 'custom1', 'custom2']
@@ -160,3 +176,15 @@ def edit_cmd(api, args, routers=None):
         if v is not None:
             value[x] = v
     api.put('routers', router['id'], value)
+
+
+def delete_cmd(api, args):
+    for id_or_name in args.ROUTER_ID_OR_NAME:
+        router = api.get_by_id_or_name('routers', id_or_name)
+        if not args.force:
+            confirm = input('Delete router: %s, id:%s (type "yes" to confirm): ' % (
+                            router['name'], router['id']))
+            if confirm != 'yes':
+                print("Aborted")
+                continue
+        api.delete('routers', router['id'])

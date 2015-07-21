@@ -92,11 +92,11 @@ class ECMService(syndicate.Service):
         self.account = None
         self.load_session()
         # Eventually auth sig could be based on an api token too.
-        auth_sig = username and hashlib.sha1(username.encode()).hexdigest()
+        auth_sig = username and hashlib.sha256(username.encode()).hexdigest()
         if not self.session_id or (auth_sig and self.auth_sig != auth_sig):
             self.reset_session(auth_sig)
             creds = {
-                "username": username or input('ECM Username: '),
+                "username": username or input('Username: '),
                 "password": password or getpass.getpass()
             }
             auth = LoginAuth(url='%s%s/login/' % (self.site, self.api_prefix),
