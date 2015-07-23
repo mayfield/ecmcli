@@ -71,7 +71,7 @@ class TOSParser(html.parser.HTMLParser):
         with tempfile.NamedTemporaryFile() as f:
             for x in self.buf:
                 f.write(x.encode())
-            os.system('more %s' % f.name)
+            os.system('less -r %s' % f.name)
         del self.buf[:]
 
 

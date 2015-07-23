@@ -74,7 +74,14 @@ def show_cmd(api, args):
 
 def create_cmd(api, args):
     username = args.email or input('Email: ')
-    password = args.password or getpass.getpass()
+    password = args.password
+    if not password:
+        password = getpass.getpass('Password (or empty to send email): ')
+        if password:
+            password2 = getpass.getpass('Confirm Password: ')
+            if password != password2:
+                print("Aborted: passwords do not match")
+                exit(1)
     name = splitname(args.fullname or input('Full Name: '))
     role = args.role or input('Role {%s}: ' % ', '.join(role_choices))
     role_id = {
@@ -93,7 +100,7 @@ def create_cmd(api, args):
         "password": password
     }, expand='profile')
     api.put('profiles', user['profile']['id'], {
-        "require_password_change": False
+        "require_password_change": not password
     })
     api.post('authorizations', {
         "account": user['profile']['account'],
