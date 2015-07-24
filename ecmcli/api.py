@@ -88,7 +88,9 @@ class ECMService(syndicate.Service):
     api_prefix = '/api/v1'
     session_file = os.path.expanduser('~/.ecmcli_session')
 
-    def __init__(self, username=None, password=None):
+    def __init__(self, site, username=None, password=None):
+        if site:
+            self.site = site
         self.account = None
         self.load_session()
         # Eventually auth sig could be based on an api token too.

@@ -47,6 +47,10 @@ EXPANDS = ','.join([
 ])
 
 
+def completer(text, line, begin, end):
+    return [x for x in commands.choices if x.startswith(text)]
+
+
 def command(api, args):
     if not args.cmd:
         args.cmd = 'show'

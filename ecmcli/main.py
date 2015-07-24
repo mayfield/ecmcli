@@ -29,6 +29,7 @@ subs = main_parser.add_subparsers(title='subcommands', description=sub_desc,
 main_parser.add_argument('--username')
 main_parser.add_argument('--password')
 main_parser.add_argument('--account')
+main_parser.add_argument('--site')
 main_parser.add_argument('--version', action='version', version=distro.version)
 
 
@@ -64,10 +65,8 @@ COMMANDS = dict((
 
 def main():
     args = main_parser.parse_args()
-    #if not hasattr(args, 'invoke'):
-        #main_parser.print_help()
-        #exit(1)
-    ecmapi = api.ECMService(username=args.username, password=args.password)
+    ecmapi = api.ECMService(args.site, username=args.username,
+                            password=args.password)
     if args.account:
         try:
             ecmapi.account = int(args.account)
@@ -79,6 +78,7 @@ def main():
                 print("Error: Account not found:", args.account)
                 exit(1)
     options = {}
+    # XXX Deprecate this entire thing so command exec is simple
     if getattr(args, 'get_routers', False):
         filters = {}
         if getattr(args, 'routers', None):
@@ -99,7 +99,7 @@ def main():
             exit(0)
         options['routers'] = routers
     if not hasattr(args, 'invoke'):
-        shell.ECMShell(ecmapi, args, options).cmdloop()
+        shell.ECMShell(COMMANDS, ecmapi).cmdloop()
     try:
         args.invoke(ecmapi, args, **options)
     except KeyboardInterrupt:
