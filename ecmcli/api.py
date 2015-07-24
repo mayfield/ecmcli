@@ -105,6 +105,7 @@ class ECMService(syndicate.Service):
             auth = None
         super().__init__(uri=self.site, urn=self.api_prefix, auth=auth,
                          serializer='htmljson')
+        self.ident = self.get('login')
 
     def bind_adapter(self, adapter):
         super().bind_adapter(adapter)
@@ -191,10 +192,10 @@ class ECMService(syndicate.Service):
             })
             return True
 
-    def search(self, resource, fields, criteria, match='icontains'):
+    def search(self, resource, fields, criteria, match='icontains', **options):
         query = [('%s__%s' % (x, match), criteria) for x in fields]
         terms = ['='.join(x) for x in query]
-        return self.get_pager(resource, _or='|'.join(terms))
+        return self.get_pager(resource, _or='|'.join(terms), **options)
 
     def get_by_id_or_name(self, resource, id_or_name, required=True, **options):
         try:

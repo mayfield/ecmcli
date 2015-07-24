@@ -23,7 +23,6 @@ create_parser.add_argument('--fullname')
 create_parser.add_argument('--role', choices=role_choices)
 
 edit_parser.add_argument('USERNAME')
-edit_parser.add_argument('--username')
 edit_parser.add_argument('--email')
 edit_parser.add_argument('--fullname')
 
@@ -45,6 +44,12 @@ search_parser.add_argument('-v', '--verbose', action='store_true',
                            help="Verbose output.")
 
 
+EXPANDS = ','.join([
+    'authorizations.role',
+    'profile.account'
+])
+
+
 def splitname(fullname):
     name = fullname.rsplit(' ', 1)
     last_name = name.pop() if len(name) > 1 else ''
@@ -60,16 +65,17 @@ def command(api, args):
     cmd(api, args)
 
 
-def show_cmd(api, args):
+def show_cmd(api, args, users=None):
     printer = verbose_printer if args.verbose else terse_printer
-    if args.USERNAME:
-        users = [get_user(api, args.USERNAME)]
-    else:
-        users = get_users(api)
+    if users is None:
+        if args.USERNAME:
+            users = [get_user(api, args.USERNAME)]
+        else:
+            users = api.get_pager('users', expand=EXPANDS)
     if not args.verbose:
         printer(None, header=True)
     for x in users:
-        printer(x)
+        printer(bundle_user(x))
 
 
 def create_cmd(api, args):
@@ -111,12 +117,11 @@ def create_cmd(api, args):
 
 
 def get_user(api, username):
-    expand = ['authorizations.role', 'profile.account']
-    user = api.get('users', username=username, expand=','.join(expand))
+    user = api.get('users', username=username, expand=EXPANDS)
     if not user:
         print("Invalid Username")
         exit(1)
-    return bundle_user(user[0])
+    return user[0]
 
 
 def edit_cmd(api, args):
@@ -126,11 +131,8 @@ def edit_cmd(api, args):
         first, last = splitname(args.fullname)
         updates['first_name'] = first
         updates['last_name'] = last
-    if args.username:
-        updates['username'] = args.username
     if args.email:
         updates['email'] = args.email
-    print(updates)
     api.put('users', user['id'], updates)
 
 
@@ -149,7 +151,8 @@ def delete_cmd(api, args):
 def move_cmd(api, args):
     user = get_user(api, args.USERNAME)
     account = api.get_by_id_or_name('accounts', args.NEW_ACCOUNT_ID_OR_NAME)
-    api.put('profiles', user['profile']['id'], {"account": account['resource_uri']})
+    api.put('profiles', user['profile']['id'],
+            {"account": account['resource_uri']})
 
 
 def passwd_cmd(api, args):
@@ -168,15 +171,11 @@ def passwd_cmd(api, args):
 def search_cmd(api, args):
     search = ' '.join(args.SEARCH_CRITERIA)
     fields = ['username', 'first_name', 'last_name', 'email']
-    results = list(api.search('users', fields, search))
+    results = list(api.search('users', fields, search, expand=EXPANDS))
     if not results:
         print("No Results For:", search)
         exit(1)
-    printer = verbose_printer if args.verbose else terse_printer
-    if not args.verbose:
-        printer(None, header=True)
-    for x in get_users(api, id__in=','.join(x['id'] for x in results)):
-        printer(x)
+    show_cmd(api, args, users=results)
 
 
 def bundle_user(user):
@@ -185,12 +184,6 @@ def bundle_user(user):
                               for x in user['authorizations']
                               if x['role']['id'] != '4')
     return user
-
-
-def get_users(api, **filters):
-    expand = ['authorizations.role', 'profile.account']
-    for x in api.get_pager('users', expand=','.join(expand), **filters):
-        yield bundle_user(x)
 
 
 def verbose_printer(user):

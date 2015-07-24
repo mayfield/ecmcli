@@ -14,9 +14,9 @@ edit_parser = commands.add_parser('edit', help='Edit router attributes')
 move_parser = commands.add_parser('move', help='Move a router into a different '
                                'account')
 groupassign_parser = commands.add_parser('groupassign', help='Assign router to '
-                                      'a group')
+                                      'a (new) group')
 groupunassign_parser = commands.add_parser('groupunassign', help='Unassign '
-                                        'router from a group')
+                                        'router from its group')
 search_parser = commands.add_parser('search', help='Search for router(s)')
 
 edit_parser.add_argument('ROUTER_ID_OR_NAME')
@@ -31,11 +31,13 @@ move_parser.add_argument('NEW_ACCOUNT_ID_OR_NAME')
 
 groupassign_parser.add_argument('ROUTER_ID_OR_NAME')
 groupassign_parser.add_argument('NEW_GROUP_ID_OR_NAME')
+groupassign_parser.add_argument('-f', '--force', action='store_true',
+                                help="Do not prompt for confirmation")
 
 groupunassign_parser.add_argument('ROUTER_ID_OR_NAME')
 
 delete_parser.add_argument('ROUTER_ID_OR_NAME', nargs='+')
-delete_parser.add_argument('-f', '--force', action="store_true",
+delete_parser.add_argument('-f', '--force', action='store_true',
                            help="Do not prompt for confirmation")
 
 show_parser.add_argument('ROUTER_ID_OR_NAME', nargs='?')
@@ -160,11 +162,22 @@ def terse_printer(routers, api=None):
 
 
 def groupassign_cmd(api, args):
-    pass
+    router = api.get_by_id_or_name('routers', args.ROUTER_ID_OR_NAME,
+                                   expand='group')
+    group = api.get_by_id_or_name('groups', args.NEW_GROUP_ID_OR_NAME)
+    if router['group'] and not args.force:
+        confirm = input('Replace router group: %s with %s (type "yes" to '
+                        'confirm): ' % (router['group']['name'],
+                        group['name']))
+        if confirm != 'yes':
+            print("Aborted")
+            exit(1)
+    api.put('routers', router['id'], {"group": group['resource_uri']})
 
 
 def groupunassign_cmd(api, args):
-    pass
+    router = api.get_by_id_or_name('routers', args.ROUTER_ID_OR_NAME)
+    api.put('routers', router['id'], {"group": None})
 
 
 def edit_cmd(api, args):

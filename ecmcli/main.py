@@ -12,7 +12,7 @@ import importlib
 import logging
 import pkg_resources
 import sys
-from . import api, commands
+from . import api, commands, shell
 
 #logging.basicConfig(level=0)
 
@@ -43,26 +43,30 @@ def add_command(name, parents=None, **defaults):
     module.parser.prog = '%s %s' % (main_parser.prog, name)
     p = subs.add_parser(name, parents=parents+[module.parser], help=help)
     p.set_defaults(invoke=module.command, parser=module.parser, **defaults)
+    return name, module
 
-add_command('accounts')
-add_command('alerts', parents=[routers_parser], get_routers=True)
-add_command('config', parents=[routers_parser], get_routers=True)
-add_command('flashleds', parents=[routers_parser], get_routers=True)
-add_command('groups')
-add_command('logs', parents=[routers_parser], get_routers=True)
-add_command('reboot', parents=[routers_parser], get_routers=True)
-add_command('routers')
-add_command('settings')
-add_command('shell', parents=[routers_parser], get_routers=True)
-add_command('users')
-add_command('wanrate', parents=[routers_parser], get_routers=True)
+
+COMMANDS = dict((
+    add_command('accounts'),
+    add_command('alerts', parents=[routers_parser], get_routers=True),
+    add_command('config', parents=[routers_parser], get_routers=True),
+    add_command('flashleds', parents=[routers_parser], get_routers=True),
+    add_command('groups'),
+    add_command('logs', parents=[routers_parser], get_routers=True),
+    add_command('reboot', parents=[routers_parser], get_routers=True),
+    add_command('routers'),
+    add_command('settings'),
+    add_command('shell', parents=[routers_parser], get_routers=True),
+    add_command('users'),
+    add_command('wanrate', parents=[routers_parser], get_routers=True)
+))
 
 
 def main():
     args = main_parser.parse_args()
-    if not hasattr(args, 'invoke'):
-        main_parser.print_help()
-        exit(1)
+    #if not hasattr(args, 'invoke'):
+        #main_parser.print_help()
+        #exit(1)
     ecmapi = api.ECMService(username=args.username, password=args.password)
     if args.account:
         try:
@@ -94,6 +98,8 @@ def main():
             print("WARNING: No Routers Found", file=sys.stderr)
             exit(0)
         options['routers'] = routers
+    if not hasattr(args, 'invoke'):
+        shell.ECMShell(ecmapi, args, options).cmdloop()
     try:
         args.invoke(ecmapi, args, **options)
     except KeyboardInterrupt:
