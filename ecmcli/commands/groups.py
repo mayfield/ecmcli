@@ -120,12 +120,11 @@ def edit_cmd(api, args):
     if args.name:
         updates['name'] = args.name
     if args.product:
-        p = api.get_by_id_or_name(args.product)
+        p = api.get_by_id_or_name('products', args.product)
         updates['product'] = p['resource_uri']
     if args.firmware:
-        p = api.get_by_id_or_name(args.product)
-        updates['firmware'] = api.get_by_id_or_name(args.product)
-        # XXX TBD
+        fw = api.get_by(['version'], 'firmwares', args.firmware)
+        updates['target_firmware'] = fw['resource_uri']
     api.put('groups', group['id'], updates)
 
 
@@ -148,11 +147,12 @@ def move_cmd(api, args):
 
 
 def search_cmd(api, args):
-    search = ' '.join(args.SEARCH_CRITERIA)
-    fields = ['name', 'target_firmware.version', 'product.name']
+    search = args.SEARCH_CRITERIA
+    fields = ['name', ('firmware', 'target_firmware.version'),
+              ('product', 'product.name'), ('account', 'account.name')]
     results = list(api.search('groups', fields, search, expand=EXPANDS))
     if not results:
-        print("No Results For:", search)
+        print("No Results For:", *search)
         exit(1)
     show_cmd(api, args, groups=results)
 

@@ -194,22 +194,46 @@ class ECMService(syndicate.Service):
             })
             return True
 
-    def search(self, resource, fields, criteria, match='icontains', **options):
-        query = [('%s__%s' % (x, match), criteria) for x in fields]
-        terms = ['='.join(x) for x in query]
-        return self.get_pager(resource, _or='|'.join(terms), **options)
-
-    def get_by_id_or_name(self, resource, id_or_name, required=True, **options):
-        try:
-            options['id'] = int(id_or_name)
-        except ValueError:
-            options['name'] = id_or_name
-        try:
-            return self.get(resource, **options)[0]
-        except IndexError:
-            if required:
-                print("%s Not Found:" % resource[:-1].capitalize(),
-                      id_or_name)
-                exit(1)
+    def search(self, resource, field_desc, criteria, match='icontains',
+               **options):
+        or_terms = []
+        fields = {}
+        for x in field_desc:
+            if isinstance(x, tuple):
+                fields[x[0]] = x[1]
             else:
-                return None
+                fields[x] = x
+        for term in criteria:
+            if ':' in term:
+                field, value = term.split(':', 1)
+                if field not in fields:
+                    print("Invalid Search Field:", field)
+                    print("Valid Specifiers:", ', '.join(fields))
+                    exit(1)
+                options['%s__%s' % (fields[field], match)] = value
+                fields.pop(field)
+            else:
+                query = [('%s__%s' % (x, match), term)
+                         for x in fields.values()]
+                or_terms.extend('='.join(x) for x in query)
+        if or_terms:
+            options['_or'] = '|'.join(or_terms)
+        return self.get_pager(resource, **options)
+
+    def get_by(self, selectors, resource, criteria, required=True, **options):
+        for field in selectors:
+            filters = options.copy()
+            filters[field] = criteria
+            try:
+                return self.get(resource, **filters)[0]
+            except IndexError:
+                pass
+        if required:
+            print("%s Not Found:" % resource[:-1].capitalize(), criteria)
+            exit(1)
+
+    def get_by_id_or_name(self, resource, id_or_name, **kwargs):
+        selectors = ['name']
+        if id_or_name.isnumeric():
+            selectors.insert(0, 'id')
+        return self.get_by(selectors, resource, id_or_name, **kwargs)

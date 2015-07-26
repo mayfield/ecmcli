@@ -48,6 +48,17 @@ search_parser.add_argument('SEARCH_CRITERIA', nargs='+')
 search_parser.add_argument('-v', '--verbose', action='store_true',
                            help="Verbose output.")
 
+EXPANDS = [
+    'account',
+    'group'
+]
+VERBOSE_EXPANDS = [
+    'group',
+    'product',
+    'actual_firmware',
+    'last_known_location',
+    'featurebindings'
+]
 
 def command(api, args):
     if not args.cmd:
@@ -58,24 +69,14 @@ def command(api, args):
     cmd(api, args)
 
 
-def show_cmd(api, args):
-    expand = [
-        'account',
-        'group'
-    ]
-    if args.verbose:
-        expand.extend([
-            'group',
-            'product',
-            'actual_firmware',
-            'last_known_location',
-            'featurebindings'
-        ])
-    if args.ROUTER_ID_OR_NAME:
-        routers = [api.get_by_id_or_name('routers', args.ROUTER_ID_OR_NAME,
-                   expand=','.join(expand))]
-    else:
-        routers = api.get_pager('routers', expand=','.join(expand))
+def show_cmd(api, args, routers=None):
+    if routers is None:
+        expands = EXPANDS + (VERBOSE_EXPANDS if args.verbose else [])
+        if args.ROUTER_ID_OR_NAME:
+            routers = [api.get_by_id_or_name('routers', args.ROUTER_ID_OR_NAME,
+                       expand=','.join(expands))]
+        else:
+            routers = api.get_pager('routers', expand=','.join(expands))
     printer = verbose_printer if args.verbose else terse_printer
     printer(routers, api=api)
 
@@ -201,3 +202,21 @@ def delete_cmd(api, args):
                 print("Aborted")
                 continue
         api.delete('routers', router['id'])
+
+
+def search_cmd(api, args):
+    search = args.SEARCH_CRITERIA
+    fields = ['name', 'desc', 'mac', ('account', 'account.name'), 'asset_id',
+              'custom1', 'custom2', ('group', 'group.name'),
+              ('firmware', 'actual_firmware.version'), 'ip_address',
+              ('product', 'product.name'), 'serial_number', 'state']
+    expands = EXPANDS + (VERBOSE_EXPANDS if args.verbose else [])
+    results = list(api.search('routers', fields, search,
+                              expand=','.join(expands)))
+    if not results:
+        print("No Results For:", *search)
+        exit(1)
+    show_cmd(api, args, routers=results)
+
+
+

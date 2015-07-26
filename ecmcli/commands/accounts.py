@@ -53,7 +53,6 @@ def show_cmd(api, args):
     if args.ACCOUNT_ID_OR_NAME:
         account = api.get_by_id_or_name('accounts', args.ACCOUNT_ID_OR_NAME)
         print(verbose_formatter(api, account))
-        exit(0)
     else:
         return show_tree(api, args)
 
@@ -158,8 +157,10 @@ def rename_cmd(api, args):
 
 
 def search_cmd(api, args):
-    criteria = ' '.join(args.SEARCH_CRITERIA)
-    results = api.search('accounts', ['name'], criteria)
+    results = list(api.search('accounts', ['name'], args.SEARCH_CRITERIA))
+    if not results:
+        print("No Results For:", *args.SEARCH_CRITERIA)
+        exit(1)
     _verbose_formatter = lambda x: verbose_formatter(api, x)
     formatter = _verbose_formatter if args.verbose else terse_formatter
     for x in results:

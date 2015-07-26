@@ -169,11 +169,12 @@ def passwd_cmd(api, args):
 
 
 def search_cmd(api, args):
-    search = ' '.join(args.SEARCH_CRITERIA)
-    fields = ['username', 'first_name', 'last_name', 'email']
+    search = args.SEARCH_CRITERIA
+    fields = ['username', 'first_name', 'last_name', 'email',
+              ('account', 'profile.account.name')]
     results = list(api.search('users', fields, search, expand=EXPANDS))
     if not results:
-        print("No Results For:", search)
+        print("No Results For:", *search)
         exit(1)
     show_cmd(api, args, users=results)
 
