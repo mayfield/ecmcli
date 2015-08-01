@@ -2,25 +2,8 @@
 Get and set configs for routers and groups.
 """
 
-import argparse
 import json
-
-parser = argparse.ArgumentParser(add_help=False)
-
-parser.add_argument('--group', metavar='ID_OR_NAME')
-parser.add_argument('GET_OR_SET', nargs='*', help='key or key=value')
-
-
-def command(api, args, routers):
-    if not args.GET_OR_SET:
-        return get_value(api, routers, None)
-    get_andor_set = ' '.join(args.GET_OR_SET).split('=', 1)
-    key = get_andor_set.pop(0)
-    if get_andor_set:
-        value = get_andor_set[0]
-        return set_value(api, routers, key, value)
-    else:
-        return get_value(api, routers, key)
+from . import base
 
 
 def walk_config(key, config):
@@ -35,19 +18,45 @@ def walk_config(key, config):
     return offt
 
 
-def set_value(api, routers, key, value):
-    for x in routers:
-        ok = api.put('remote', 'config', key.replace('.', '/'), json.loads(value),
-                     id=x['id'])[0]
-        print('%s:' % x['name'], 'okay' if ok['success'] else ok['exception'])
+class Config(base.Command):
+    """ Anaylize and Report ECM Alerts """
 
+    name = 'config'
 
-def get_value(api, routers, key):
-    for x in routers:
-        diff = api.get('routers', x['id'], 'configuration_manager',
-                       'configuration')
-        updates, removals = diff
-        path = x['name']
-        if key:
-            path += '.%s' % key
-        print(path, '=', json.dumps(walk_config(key, updates)))
+    def init_argparser(self):
+        parser = base.ArgParser(self.name)
+        parser.add_argument('--group', metavar='ID_OR_NAME')
+        parser.add_argument('get_or_set', metavar='GET_OR_SET', nargs='?',
+                            help='key or key=value')
+        return parser
+
+    def run(self, args):
+        routers = self.api.get_pager('routers')
+        if not args.get_or_set:
+            return self.get_value(routers, None)
+        get_or_set = args.get_or_set.split('=', 1)
+        key = get_or_set.pop(0)
+        if get_or_set:
+            value = get_or_set[0]
+            return self.set_value(routers, key, value)
+        else:
+            return self.get_value(routers, key)
+
+    def set_value(self, routers, key, value):
+        for x in routers:
+            ok = self.api.put('remote', 'config', key.replace('.', '/'),
+                              json.loads(value), id=x['id'])[0]
+            status = 'okay' if ok['success'] else ok['exception']
+            print('%s:' % x['name'], status)
+
+    def get_value(self, routers, key):
+        for x in routers:
+            diff = self.api.get('routers', x['id'], 'configuration_manager',
+                                'configuration')
+            updates, removals = diff
+            path = x['name']
+            if key:
+                path += '.%s' % key
+            print(path, '=', json.dumps(walk_config(key, updates), indent=4))
+
+command_classes = [Config]

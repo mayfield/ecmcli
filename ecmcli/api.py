@@ -9,11 +9,11 @@ import html
 import html.parser
 import json
 import os
+import shutil
 import syndicate
 import syndicate.client
 import syndicate.data
-import sys
-import tempfile
+import textwrap
 from syndicate.adapters.sync import LoginAuth
 
 
@@ -68,11 +68,19 @@ class TOSParser(html.parser.HTMLParser):
             self.buf.append(data.replace('\n', ' '))
 
     def pager(self):
-        with tempfile.NamedTemporaryFile() as f:
-            for x in self.buf:
-                f.write(x.encode())
-            os.system('less -r %s' % f.name)
+        width, height = shutil.get_terminal_size()
+        data = []
+        buf = ''.join(self.buf)
         del self.buf[:]
+        for line in buf.splitlines():
+            data.extend(textwrap.wrap(line, width-4))
+        i = 0
+        for x in data:
+            i += 1
+            if i == height - 1:
+                input("<Press enter to view next page>")
+                i = 0
+            print(x)
 
 
 syndicate.data.serializers['htmljson'] = syndicate.data.Serializer(
@@ -80,6 +88,52 @@ syndicate.data.serializers['htmljson'] = syndicate.data.Serializer(
     syndicate.data.serializers['json'].encode,
     HTMLJSONDecoder().decode
 )
+
+
+class AuthFailure(SystemExit):
+    pass
+
+
+class Unauthorized(AuthFailure):
+    """ Either the login is bad or the session is expired. """
+    pass
+
+
+class TOSRequired(AuthFailure):
+    """ The terms of service have not been accepted yet. """
+    pass
+
+
+class ECMLogin(LoginAuth):
+
+    def setup(self, username, password):
+        self.login = None
+        self.username = username or input('Username: ')
+        self.req_kwargs = dict(data=self.serializer({
+            "username": self.username,
+            "password": password or getpass.getpass()
+        }))
+
+    def check_login_response(self):
+        super().check_login_response()
+        resp = self.login.json()['data']
+        if resp.get('success') is False:
+            raise Unauthorized(resp['error_code'])
+
+    def __call__(self, request):
+        try:
+            del request.headers['Cookie']
+        except KeyError:
+            pass
+        return super().__call__(request)
+
+    @property
+    def signature(self):
+        return self.gen_signature(self.username)
+
+    @staticmethod
+    def gen_signature(key):
+        return key and hashlib.sha256(key.encode()).hexdigest()
 
 
 class ECMService(syndicate.Service):
@@ -92,51 +146,52 @@ class ECMService(syndicate.Service):
         if site:
             self.site = site
         self.account = None
-        self.load_session()
-        # Eventually auth sig could be based on an api token too.
-        auth_sig = username and hashlib.sha256(username.encode()).hexdigest()
-        if not self.session_id or (auth_sig and self.auth_sig != auth_sig):
-            self.reset_session(auth_sig)
-            creds = {
-                "username": username or input('Username: '),
-                "password": password or getpass.getpass()
-            }
-            auth = LoginAuth(url='%s%s/login/' % (self.site, self.api_prefix),
-                             data=creds)
-        else:
-            auth = None
-        super().__init__(uri=self.site, urn=self.api_prefix, auth=auth,
+        self.hard_username = username
+        self.hard_password = password
+        super().__init__(uri=self.site, urn=self.api_prefix,
                          serializer='htmljson')
+        self.load_session(ECMLogin.gen_signature(username))
+        if not self.session_id:
+            self.reset_auth()
+        else:
+            self.ident = self.get('login')
+
+    def reset_auth(self):
+        self.reset_session()
+        auth = ECMLogin(url='%s%s/login/' % (self.site, self.api_prefix))
+        auth.setup(self.hard_username, self.hard_password)
+        self.auth_sig = auth.signature
+        self.adapter.auth = auth
         self.ident = self.get('login')
 
-    def bind_adapter(self, adapter):
-        super().bind_adapter(adapter)
-        if self.session_id:
-            self.adapter.session.cookies['sessionid'] = self.session_id
-
-    def load_session(self):
-        self.auth_sig = None
+    def load_session(self, signature_lock):
+        session_id = auth_sig = None
         try:
             with open(self.session_file) as f:
                 d = json.load(f)
                 try:
-                    self.session_id, self.auth_sig = d
-                except ValueError:
-                    self.session_id = d
+                    session_id, auth_sig = d
+                except ValueError:  # old style session
+                    pass
+                else:
+                    if signature_lock and auth_sig != signature_lock:
+                        session_id = auth_sig = None
         except FileNotFoundError:
-            self.session_id = None
+            pass
+        self.session_id = session_id
+        self.auth_sig = auth_sig
+        if self.session_id:
+            self.adapter.session.cookies['sessionid'] = self.session_id
 
-    def reset_session(self, auth_sig=None):
+    def reset_session(self):
         """ Delete the session state file and return True if an action
         happened. """
         self.session_id = None
-        self.auth_sig = auth_sig
+        self.auth_sig = None
         try:
             os.remove(self.session_file)
         except FileNotFoundError:
-            return False
-        else:
-            return True
+            pass
 
     def check_session(self):
         """ ECM sometimes updates the session token. We make sure we are in
@@ -156,27 +211,29 @@ class ECMService(syndicate.Service):
             result = super().do(*args, **kwargs)
         except syndicate.client.ResponseError as e:
             self.handle_error(e)
-            # Retry if handle_error did not exit.
+            result = super().do(*args, **kwargs)
+        except Unauthorized as e:
+            print('Auth Error:', e)
+            self.reset_auth()
             result = super().do(*args, **kwargs)
         self.check_session()
         return result
 
     def handle_error(self, error):
         """ Pretty print error messages and exit. """
-        if error.response['exception'] == 'precondition_failed' and \
-           error.response['message'] == 'must_accept_tos':
+        resp = error.response
+        if resp.get('exception') == 'precondition_failed' and \
+           resp['message'] == 'must_accept_tos':
             if self.accept_tos():
                 return
-            print("\nWARNING: User did not accept terms.")
-            exit(1)
-        print('Response ERROR: ', file=sys.stderr)
-        for key, val in sorted(error.response.items()):
-            print("  %-20s: %s" % (key.capitalize(),
-                  html.unescape(str(val))), file=sys.stderr)
-        if error.response['exception'] == 'unauthorized':
-            if self.reset_session():
-                print('WARNING: Flushed session state', file=sys.stderr)
-        exit(1)
+            raise TOSRequired("WARNING: User did not accept terms")
+        err = resp.get('exception') or resp.get('error_code')
+        if err in ('login_failure', 'unauthorized'):
+            self.reset_auth()
+            return
+        if resp['message']:
+            err += '\n%s' % resp['message'].strip()
+        raise SystemExit("Error: %s" % err)
 
     def accept_tos(self):
         tos_parser = TOSParser()
@@ -186,7 +243,7 @@ class ECMService(syndicate.Service):
                   "continue: <press enter>")
             tos_parser.pager()
             print()
-            accept = input('Type "accept" to comply with this TOS: ')
+            accept = input('Type "accept" to comply with the TOS: ')
             if accept != 'accept':
                 return False
             self.post('system_message_confirm', {
@@ -209,7 +266,7 @@ class ECMService(syndicate.Service):
                 if field not in fields:
                     print("Invalid Search Field:", field)
                     print("Valid Specifiers:", ', '.join(fields))
-                    exit(1)
+                    raise SystemExit()
                 options['%s__%s' % (fields[field], match)] = value
                 fields.pop(field)
             else:
@@ -229,8 +286,8 @@ class ECMService(syndicate.Service):
             except IndexError:
                 pass
         if required:
-            print("%s Not Found:" % resource[:-1].capitalize(), criteria)
-            exit(1)
+            raise SystemExit("%s not found: %s" % (resource[:-1].capitalize(),
+                             criteria))
 
     def get_by_id_or_name(self, resource, id_or_name, **kwargs):
         selectors = ['name']

@@ -2,10 +2,34 @@
 Display and edit account and/or group settings.
 """
 
-import argparse
-
-parser = argparse.ArgumentParser(add_help=False)
+from . import base
 
 
-def command(api, args):
-    print("SETTINGS")
+class Settings(base.Command):
+
+    name = 'settings'
+    expands = ','.join([
+        'setting'
+    ])
+
+    def init_argparser(self):
+        parser = base.ArgParser(self.name)
+        or_group = parser.add_mutually_exclusive_group()
+        or_group.add_argument('--group', metavar='GROUP_ID_OR_NAME')
+        or_group.add_argument('--account', metavar='ACCOUNT_ID_OR_NAME')
+        parser.add_argument('get_or_set', metavar='GET_OR_SET', nargs='?',
+                            help='key or key=value')
+        return parser
+
+    def run(self, args):
+        if args.group:
+            res = self.api.get_by_id_or_name('groups', args.group)
+        elif args.account:
+            res = self.api.get_by_id_or_name('account', args.account)
+        else:
+            res = self.api.ident['account']
+        for x in self.api.get_pager(urn=res['settings_bindings'],
+                                    expand=self.expands):
+            print(x['setting']['name'], x['value'])
+
+command_classes = [Settings]

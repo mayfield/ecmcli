@@ -1,11 +1,26 @@
+"""
+Interactive shell for ECM.
+"""
+
 import cmd
+import os.path
+import readline
+import shlex
+import shutil
 import sys
+from . import api
+
+
+class ShellQuit(Exception):
+    pass
+
 
 class ECMShell(cmd.Cmd):
 
+    history_file = os.path.expanduser('~/.ecmcli_history')
     intro = '\n'.join([
         'Welcome to the ECM shell.',
-        'Type help or ? to list commands.'
+        'Type "help" or "?" to list commands and "exit" to quit.'
     ])
 
     @property
@@ -20,24 +35,55 @@ class ECMShell(cmd.Cmd):
     def __init__(self, commands, api):
         self.api = api
         self.cwd = [api.ident['account']]
-        self.command_methods = ['do_%s' % x for x in commands]
-        for name, module in commands.items():
-            setattr(self, 'do_%s' % name, self.wrap_module(name, module))
-            setattr(self, 'help_%s' % name, module.parser.print_help)
-            if hasattr(module, 'completer'):
-                setattr(self, 'complete_%s' % name, module.completer)
+        self.command_methods = ['do_%s' % x.name for x in commands]
+        try:
+            readline.read_history_file(self.history_file)
+        except FileNotFoundError:
+            pass
+        for x in commands:
+            setattr(self, 'do_%s' % x.name, self.wrap_command_invoke(x))
+            setattr(self, 'help_%s' % x.name, x.argparser.print_help)
+            setattr(self, 'complete_%s' % x.name, x.complete)
         super().__init__()
 
-    def wrap_module(self, name, module):
-        def wrap(args):
-            args = module.parser.parse_args(args.split())
-            module.command(self.api, args)
-        wrap.__doc__ = module.__doc__
-        wrap.__name__ = 'do_%s' % name
+    def wrap_command_invoke(self, cmd):
+        def wrap(arg):
+            args = cmd.argparser.parse_args(shlex.split(arg))
+            cmd.invoke(self.api, args)
+        wrap.__doc__ = cmd.__doc__
+        wrap.__name__ = 'do_%s' % cmd.name
         return wrap
 
     def get_names(self):
         return super().get_names() + self.command_methods
+
+    def emptyline(self):
+        """ Do not re-run the last command. """
+        pass
+
+    def columnize(self, items, displaywidth=None):
+        if displaywidth is None:
+            displaywidth, h = shutil.get_terminal_size()
+        return super().columnize(items, displaywidth=displaywidth)
+
+    def cmdloop(self):
+        intro = ()
+        while True:
+            try:
+                super().cmdloop(*intro)
+            except ShellQuit:
+                return
+            except KeyboardInterrupt:
+                print()
+            except api.AuthFailure as e:
+                raise e
+            except SystemExit as e:
+                if not str(e).isnumeric():
+                    print(e, file=sys.stderr)
+            finally:
+                readline.write_history_file(self.history_file)
+            if not intro:
+                intro = ('',)
 
     def do_ls(self, arg):
         if arg:
@@ -49,14 +95,24 @@ class ECMShell(cmd.Cmd):
             items.append('%s/' % x['name'])
         for x in self.api.get_pager('routers', account=parent['id']):
             items.append('r:%s' % x['name'])
-        for x in self.api.get_pager('users', **{"profile.account": parent['id']}):
+        account_filter = {"profile.account": parent['id']}
+        for x in self.api.get_pager('users', **account_filter):
             items.append('u:%s' % x['username'])
         self.columnize(items)
+
+    def do_login(self, arg):
+        try:
+            self.api.reset_auth()
+        except api.AuthFailure as e:
+            print('Auth Error:', e)
+
+    def do_exit(self, arg):
+        raise ShellQuit()
 
     def default(self, line):
         if line == 'EOF':
             print('^D')
-            exit(0)
+            raise ShellQuit()
         else:
             return super().default(line)
 

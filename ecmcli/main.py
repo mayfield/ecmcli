@@ -7,106 +7,68 @@ to use this tool.  For more info go to https://cradlepointecm.com/.
 """
 
 import argparse
-import collections
 import importlib
-import logging
 import pkg_resources
 import sys
 from . import api, commands, shell
 
-#logging.basicConfig(level=0)
+#import logging;logging.basicConfig(level=0)
 
-routers_parser = argparse.ArgumentParser(add_help=False)
-routers_parser.add_argument('--routers', nargs='+', metavar="ID_OR_NAME")
+command_modules = [
+    'accounts',
+    'alerts',
+    'config',
+    'flashleds',
+    'groups',
+    'logs',
+    'reboot',
+    'routers',
+    'settings',
+    'shell',
+    'users',
+    'wanrate'
+]
 
-raw_formatter = argparse.RawDescriptionHelpFormatter
 distro = pkg_resources.get_distribution('ecmcli')
+raw_formatter = argparse.RawDescriptionHelpFormatter
 main_parser = argparse.ArgumentParser(description=__doc__,
                                       formatter_class=raw_formatter)
-sub_desc = 'Provide a subcommand argument (below) to perform an operation.'
-subs = main_parser.add_subparsers(title='subcommands', description=sub_desc,
-                                  metavar='SUBCOMMAND', help='Usage')
+cmd_desc = 'Provide a command argument to perform an operation.'
+command_parser = main_parser.add_subparsers(title='commands',
+                                            description=cmd_desc,
+                                            metavar='COMMAND', help='Usage',
+                                            dest='command')
 main_parser.add_argument('--username')
 main_parser.add_argument('--password')
-main_parser.add_argument('--account')
-main_parser.add_argument('--site')
-main_parser.add_argument('--version', action='version', version=distro.version)
-
-
-def add_command(name, parents=None, **defaults):
-    module = importlib.import_module('.%s' % name, 'ecmcli.commands')
-    if not parents:
-        parents = []
-    try:
-        help = module.parser.format_usage().split(' ', 2)[2]
-    except IndexError:
-        help = ''
-    module.parser.prog = '%s %s' % (main_parser.prog, name)
-    p = subs.add_parser(name, parents=parents+[module.parser], help=help)
-    p.set_defaults(invoke=module.command, parser=module.parser, **defaults)
-    return name, module
-
-
-COMMANDS = dict((
-    add_command('accounts'),
-    add_command('alerts', parents=[routers_parser], get_routers=True),
-    add_command('config', parents=[routers_parser], get_routers=True),
-    add_command('flashleds', parents=[routers_parser], get_routers=True),
-    add_command('groups'),
-    add_command('logs', parents=[routers_parser], get_routers=True),
-    add_command('reboot', parents=[routers_parser], get_routers=True),
-    add_command('routers'),
-    add_command('settings'),
-    add_command('shell', parents=[routers_parser], get_routers=True),
-    add_command('users'),
-    add_command('wanrate', parents=[routers_parser], get_routers=True)
-))
+main_parser.add_argument('--account', help='Limit activity to this account')
+main_parser.add_argument('--site', help='E.g. https://cradlepointecm.com')
+main_parser.add_argument('--version', action='version',
+                         version=distro.version)
 
 
 def main():
+    cmds = []
+    for modname in command_modules:
+        module = importlib.import_module('.%s' % modname, 'ecmcli.commands')
+        for Command in module.command_classes:
+            cmd = Command()
+            cmds.append(cmd)
+            help = cmd.argparser.format_usage().split(' ', 2)[2]
+            p = command_parser.add_parser(cmd.name, parents=[cmd.argparser],
+                                          conflict_handler='resolve',
+                                          description=Command.__doc__,
+                                          help=help)
+            p.set_defaults(invoke=cmd.invoke)
+
     args = main_parser.parse_args()
     ecmapi = api.ECMService(args.site, username=args.username,
                             password=args.password)
     if args.account:
-        try:
-            ecmapi.account = int(args.account)
-        except ValueError:
-            accounts = ecmapi.get('accounts', fields='id', name=args.account)
-            try:
-                ecmapi.account = accounts[0]['id']
-            except IndexError:
-                print("Error: Account not found:", args.account)
-                exit(1)
-    options = {}
-    # XXX Deprecate this entire thing so command exec is simple
-    if getattr(args, 'get_routers', False):
-        filters = {}
-        if getattr(args, 'routers', None):
-            id_filters = []
-            name_filters = []
-            for x in args.routers:
-                try:
-                    id_filters.append(str(int(x)))
-                except ValueError:
-                    name_filters.append(x)
-            if id_filters:
-                filters["id__in"] = ','.join(id_filters)
-            if name_filters:
-                filters["name__in"] = ','.join(name_filters)
-        routers = ecmapi.get_pager('routers', **filters)
-        if not routers:
-            print("WARNING: No Routers Found", file=sys.stderr)
-            exit(0)
-        options['routers'] = routers
-    if not hasattr(args, 'invoke'):
-        shell.ECMShell(COMMANDS, ecmapi).cmdloop()
+        account = ecmapi.get_by_id_or_name('accounts', args.account)
+        ecmapi.account = account['id']
+    if not args.command:
+        return shell.ECMShell(cmds, ecmapi).cmdloop()
     try:
-        args.invoke(ecmapi, args, **options)
+        args.invoke(ecmapi, args)
     except KeyboardInterrupt:
-        pass
-    except ReferenceError as e:
-        print('ERROR:', e, '\n')
-        args.parser.print_help()
-    else:
-        exit(0)
-    exit(1)
+        sys.exit(1)

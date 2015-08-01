@@ -1,15 +1,33 @@
 """
-Flash LEDS of the router(s).
+Reboot connected router(s).
 """
 
-import argparse
-
-parser = argparse.ArgumentParser(add_help=False)
+from . import base
 
 
-def command(api, args, routers=None):
-    print("Rebooting:")
-    for rinfo in routers:
-        print("    %s (%s)" % (rinfo['name'], rinfo['id']))
-        api.put('remote/control/system/reboot', True, timeout=0,
-                id=rinfo['id'])
+class Reboot(base.Command):
+    """ Reboot connected router(s) """
+
+    name = 'reboot'
+
+    def init_argparser(self):
+        parser = base.ArgParser(self.name)
+        parser.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='*')
+        parser.add_argument('-f', '--force', action='store_true')
+        return parser
+
+    def run(self, args):
+        if args.idents:
+            routers = map(self.api.get_by_id_or_name, args.idents)
+        else:
+            routers = self.api.get_pager('routers')
+        for x in routers:
+            if not args.force and \
+               not base.confirm("Reboot %s (%s)" % (x['name'], x['id']),
+                                exit=False):
+                continue
+            print("Rebooting: %s (%s)" % (x['name'], x['id']))
+            self.api.put('remote', '/control/system/reboot', 1, timeout=0,
+                         id=x['id'])
+
+command_classes = [Reboot]

@@ -1,38 +1,47 @@
 """
-Download Device Logs from ECM.
+Download router logs from ECM.
 """
 
-import argparse
-
-FORMAT = '%(timestamp)s [%(mac)s] [%(levelname)8s] [%(source)18s] %(message)s'
-
-parser = argparse.ArgumentParser(add_help=False)
-parser.add_argument('--clear', action='store_true', help="Clear logs")
-
-# NOTE: ECM only can only filter by one level.
-parser.add_argument('-l', '--level', help="Log level to "
-                    "include (debug, info, warning, error and/or critical)")
+from . import base
 
 
-def command(api, args, routers=None):
-    if args.clear:
-        clear(api, args, routers)
-    else:
-        view(api, args, routers)
+class Logs(base.Command):
+    """ Show (or clear) router logs """
 
+    name = 'logs'
+    levels = ['debug', 'info', 'warning', 'error', 'critical']
 
-def clear(api, args, routers):
-    for rinfo in routers:
-        print("Clearing logs for: %s (%s)" % (rinfo['name'], rinfo['id']))
-        api.delete('logs', rinfo['id'])
+    def init_argparser(self):
+        parser = base.ArgParser(self.name)
+        parser.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='*')
+        parser.add_argument('--clear', action='store_true', help="Clear logs")
+        parser.add_argument('-l', '--level', choices=self.levels)
+        return parser
 
+    def run(self, args):
+        if args.idents:
+            routers = map(self.api.get_by_id_or_name, args.idents)
+        else:
+            routers = self.api.get_pager('routers')
+        if args.clear:
+            self.clear(args, routers)
+        else:
+            self.view(args, routers)
 
-def view(api, args, routers):
-    filters = {}
-    if args.level:
-        filters['levelname'] = args.level.upper()
-    for rinfo in routers:
-        print("Logs for: %s (%s)" % (rinfo['name'], rinfo['id']))
-        for x in api.get_pager('logs', rinfo['id'], **filters):
-            x['mac'] = rinfo['mac']
-            print(FORMAT % x)
+    def clear(self, args, routers):
+        for rinfo in routers:
+            print("Clearing logs for: %s (%s)" % (rinfo['name'], rinfo['id']))
+            self.api.delete('logs', rinfo['id'])
+
+    def view(self, args, routers):
+        filters = {}
+        if args.level:
+            filters['levelname'] = args.level.upper()
+        for rinfo in routers:
+            print("Logs for: %s (%s)" % (rinfo['name'], rinfo['id']))
+            for x in self.api.get_pager('logs', rinfo['id'], **filters):
+                x['mac'] = rinfo['mac']
+                print('%(timestamp)s [%(mac)s] [%(levelname)8s] ' \
+                      '[%(source)18s] %(message)s' % x)
+
+command_classes = [Logs]
