@@ -3,6 +3,7 @@ Interactive shell for ECM.
 """
 
 import cmd
+import code
 import os.path
 import readline
 import shlex
@@ -32,24 +33,27 @@ class ECMShell(cmd.Cmd):
         }
         return ': \033[7m%(user)s\033[0m@%(site)s /%(cwd)s ; \n:; ' % (info)
 
-    def __init__(self, commands, api):
-        self.api = api
-        self.cwd = [api.ident['account']]
-        self.command_methods = ['do_%s' % x.name for x in commands]
+    def __init__(self, root_command):
+        self.api = root_command.api
+        self.root_command = root_command
+        self.cwd = [self.api.ident['account']]
+        self.command_methods = ['do_%s' % x.name
+                                for x in root_command.subcommands]
         try:
             readline.read_history_file(self.history_file)
         except FileNotFoundError:
             pass
-        for x in commands:
+        for x in root_command.subcommands:
+            x.api = self.api
             setattr(self, 'do_%s' % x.name, self.wrap_command_invoke(x))
             setattr(self, 'help_%s' % x.name, x.argparser.print_help)
-            setattr(self, 'complete_%s' % x.name, x.complete)
+            setattr(self, 'complete_%s' % x.name, x.complete_wrap)
         super().__init__()
 
     def wrap_command_invoke(self, cmd):
         def wrap(arg):
             args = cmd.argparser.parse_args(shlex.split(arg))
-            cmd.invoke(self.api, args)
+            cmd.invoke(args)
         wrap.__doc__ = cmd.__doc__
         wrap.__name__ = 'do_%s' % cmd.name
         return wrap
@@ -105,6 +109,10 @@ class ECMShell(cmd.Cmd):
             self.api.reset_auth()
         except api.AuthFailure as e:
             print('Auth Error:', e)
+
+    def do_debug(self, arg):
+        """ Run an interactive python interpretor. """
+        code.interact(None, None, self.__dict__)
 
     def do_exit(self, arg):
         raise ShellQuit()

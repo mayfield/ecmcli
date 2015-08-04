@@ -5,10 +5,9 @@ Manage ECM Groups.
 from . import base
 
 
-class Groups(base.Command):
-    """ Manage ECM Groups. """
+class Printer(object):
+    """ Mixin for printing commands. """
 
-    name = 'groups'
     expands = ','.join([
         'statistics',
         'product',
@@ -18,133 +17,10 @@ class Groups(base.Command):
         'configuration'
     ])
 
-    def init_argparser(self):
-        parser = base.ArgParser(self.name, subcommands=True)
-
-        s = parser.add_subcommand('show', self.show_cmd, default=True)
-        s.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='?')
-        s.add_argument('-v', '--verbose', action='store_true')
-
-        s = parser.add_subcommand('create', self.create_cmd)
-        s.add_argument('--name')
-        s.add_argument('--product')
-        s.add_argument('--firmware')
-
-        s = parser.add_subcommand('delete', self.delete_cmd)
-        s.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='+')
-        s.add_argument('-f', '--force', action="store_true")
-
-        s = parser.add_subcommand('move', self.move_cmd)
-        s.add_argument('ident', metavar='GROUP_ID_OR_NAME')
-        s.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
-        s.add_argument('-f', '--force', action="store_true")
-
-        s = parser.add_subcommand('edit', self.edit_cmd)
-        s.add_argument('ident', metavar='GROUP_ID_OR_NAME')
-        s.add_argument('--name')
-        s.add_argument('--firmware')
-
-        s = parser.add_subcommand('search', self.search_cmd)
-        s.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
-        s.add_argument('-v', '--verbose', action='store_true')
-        return parser
-
     def prerun(self, args):
         self.printed_header = False
         self.verbose = getattr(args, 'verbose', False)
-
-    def completer(self, text, line, begin, end):
-        return [x for x in self.argparser.subparser.choices if x.startswith(text)]
-
-    def show_cmd(self, args, groups=None):
-        """ Show group(s) """
-        if groups is None:
-            if args.ident:
-                groups = [self.api.get_by_id_or_name('groups', args.ident,
-                                                     expand=self.expands)]
-            else:
-                groups = self.api.get_pager('groups', expand=self.expands)
-        for x in groups:
-            self.printer(self.bundle_group(x))
-
-    def create_cmd(self, args):
-        """ Create a new group
-        A group mostly represents configuration for more than one device, but
-        also manages settings such as alerts and log acquisition. """
-        name = args.name or input('Name: ')
-        if not name:
-            raise SystemExit("Name required")
-
-        product = args.product or input('Product: ')
-        products = dict((x['name'], x) for x in self.api.get_pager('products'))
-        if product not in products:
-            if not product:
-                print("Product required")
-            else:
-                print("Invalid product:", product)
-            print("\nValid products...")
-            for x in sorted(products):
-                print("\t", x)
-            raise SystemExit(1)
-
-        fw = args.firmware or input('Firmware: ')
-        firmwares = dict((x['version'], x)
-                         for x in self.api.get_pager('firmwares',
-                                                product=products[product]['id']))
-        if fw not in firmwares:
-            if not fw:
-                print("Firmware required")
-            else:
-                print("Invalid firmware:", fw)
-            print("\nValid firmares...")
-            for x in sorted(firmwares):
-                print("\t", x)
-            raise SystemExit(1)
-
-        self.api.post('groups', {
-            "name": name,
-            "product": products[product]['resource_uri'],
-            "target_firmware": firmwares[fw]['resource_uri']
-        })
-
-    def edit_cmd(self, args):
-        """ Edit group attributes """
-        group = self.api.get_by_id_or_name('groups', args.ident)
-        updates = {}
-        if args.name:
-            updates['name'] = args.name
-        if args.firmware:
-            fw = self.api.get_by(['version'], 'firmwares', args.firmware)
-            updates['target_firmware'] = fw['resource_uri']
-        self.api.put('groups', group['id'], updates)
-
-    def delete_cmd(self, args):
-        """ Delete one or more groups """
-        for ident in args.ident:
-            group = self.api.get_by_id_or_name('groups', ident)
-            if not args.force and \
-               not base.confirm('Delete group: %s' % group['name'],
-                                exit=False):
-                continue
-            self.api.delete('groups', group['id'])
-
-    def move_cmd(self, args):
-        """ Move group to a different account """
-        group = self.api.get_by_id_or_name('groups', args.ident)
-        account = self.api.get_by_id_or_name('accounts', args.new_account)
-        self.api.put('groups', group['id'],
-                     {"account": account['resource_uri']})
-
-    def search_cmd(self, args):
-        """ Search for groups """
-        search = args.SEARCH_CRITERIA
-        fields = ['name', ('firmware', 'target_firmware.version'),
-                  ('product', 'product.name'), ('account', 'account.name')]
-        results = list(self.api.search('groups', fields, search,
-                                       expand=self.expands))
-        if not results:
-            raise SystemExit("No Results For: %s" % ' '.join(search))
-        self.show_cmd(args, groups=results)
+        super().prerun(args)
 
     def bundle_group(self, group):
         group['target'] = '%s (%s)' % (group['product']['name'],
@@ -194,5 +70,168 @@ class Groups(base.Command):
                 "online": '%s/%s' % (group['online'], group['total'])
             }
         print('%(name)-30s %(account)-16s %(target)-16s %(online)-5s' % info)
+
+
+class Show(Printer, base.Command):
+    """ Show group(s) """
+
+    name = 'show'
+
+    def setup_args(self, parser):
+        parser.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='?')
+        parser.add_argument('-v', '--verbose', action='store_true')
+
+    def run(self, args, groups=None):
+        """ Show group(s) """
+        if groups is None:
+            if args.ident:
+                groups = [args.api.get_by_id_or_name('groups', args.ident,
+                                                     expand=self.expands)]
+            else:
+                groups = args.api.get_pager('groups', expand=self.expands)
+        for x in groups:
+            self.printer(self.bundle_group(x))
+
+
+class Create(base.Command):
+    """ Create a new group
+    A group mostly represents configuration for more than one device, but
+    also manages settings such as alerts and log acquisition. """
+
+    name = 'create'
+
+    def setup_args(self, parser):
+        parser.add_argument('--name')
+        parser.add_argument('--product')
+        parser.add_argument('--firmware')
+
+    def run(self, args):
+        name = args.name or input('Name: ')
+        if not name:
+            raise SystemExit("Name required")
+
+        product = args.product or input('Product: ')
+        products = dict((x['name'], x) for x in args.api.get_pager('products'))
+        if product not in products:
+            if not product:
+                print("Product required")
+            else:
+                print("Invalid product:", product)
+            print("\nValid products...")
+            for x in sorted(products):
+                print("\t", x)
+            raise SystemExit(1)
+
+        fw = args.firmware or input('Firmware: ')
+        firmwares = dict((x['version'], x)
+                         for x in args.api.get_pager('firmwares',
+                                                product=products[product]['id']))
+        if fw not in firmwares:
+            if not fw:
+                print("Firmware required")
+            else:
+                print("Invalid firmware:", fw)
+            print("\nValid firmares...")
+            for x in sorted(firmwares):
+                print("\t", x)
+            raise SystemExit(1)
+
+        args.api.post('groups', {
+            "name": name,
+            "product": products[product]['resource_uri'],
+            "target_firmware": firmwares[fw]['resource_uri']
+        })
+
+
+class Edit(base.Command):
+    """ Edit group attributes """
+
+    name = 'edit'
+
+    def setup_args(self, parser):
+        parser.add_argument('ident', metavar='GROUP_ID_OR_NAME')
+        parser.add_argument('--name')
+        parser.add_argument('--firmware')
+
+    def run(self, args):
+        group = args.api.get_by_id_or_name('groups', args.ident)
+        updates = {}
+        if args.name:
+            updates['name'] = args.name
+        if args.firmware:
+            fw = args.api.get_by(['version'], 'firmwares', args.firmware)
+            updates['target_firmware'] = fw['resource_uri']
+        args.api.put('groups', group['id'], updates)
+
+
+class Delete(base.Command):
+    """ Delete one or more groups """
+
+    name = 'delete'
+
+    def setup_args(self, parser):
+        parser.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='+')
+        parser.add_argument('-f', '--force', action="store_true")
+
+    def run(self, args):
+        for ident in args.ident:
+            group = args.api.get_by_id_or_name('groups', ident)
+            if not args.force and \
+               not base.confirm('Delete group: %s' % group['name'],
+                                exit=False):
+                continue
+            args.api.delete('groups', group['id'])
+
+
+class Move(base.Command):
+    """ Move group to a different account """
+
+    name = 'move'
+
+    def setup_args(self, parser):
+        parser.add_argument('ident', metavar='GROUP_ID_OR_NAME')
+        parser.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
+        parser.add_argument('-f', '--force', action="store_true")
+
+    def run(self, args):
+        group = args.api.get_by_id_or_name('groups', args.ident)
+        account = args.api.get_by_id_or_name('accounts', args.new_account)
+        args.api.put('groups', group['id'],
+                     {"account": account['resource_uri']})
+
+
+class Search(Printer, base.Command):
+    """ Search for groups """
+
+    name = 'search'
+
+    def setup_args(self, parser):
+        parser.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
+        parser.add_argument('-v', '--verbose', action='store_true')
+
+    def run(self, args):
+        search = args.SEARCH_CRITERIA
+        fields = ['name', ('firmware', 'target_firmware.version'),
+                  ('product', 'product.name'), ('account', 'account.name')]
+        results = list(args.api.search('groups', fields, search,
+                                       expand=self.expands))
+        if not results:
+            raise SystemExit("No Results For: %s" % ' '.join(search))
+        self.show_cmd(args, groups=results)
+
+
+class Groups(base.Command):
+    """ Manage ECM Groups """
+
+    name = 'groups'
+
+    def __init__(self):
+        super().__init__()
+        self.add_subcommand(Show(), default=True)
+        self.add_subcommand(Create())
+        self.add_subcommand(Edit())
+        self.add_subcommand(Delete())
+        self.add_subcommand(Move())
+        self.add_subcommand(Search())
 
 command_classes = [Groups]
