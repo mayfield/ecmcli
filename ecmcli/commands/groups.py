@@ -17,9 +17,14 @@ class Printer(object):
         'configuration'
     ])
 
+    def setup_args(self, parser):
+        parser.add_argument('-v', '--verbose', action='store_true')
+        super().setup_args(parser)
+
     def prerun(self, args):
         self.printed_header = False
-        self.verbose = getattr(args, 'verbose', False)
+        self.printer = self.verbose_printer if args.verbose else \
+                       self.terse_printer
         super().prerun(args)
 
     def bundle_group(self, group):
@@ -34,11 +39,7 @@ class Printer(object):
         group['total'] = stats['device_count']
         return group
 
-    def printer(self, group):
-        fn = self.verbose_printer if self.verbose else self.terse_printer
-        fn(group)
-
-    def verbose_printer(group):
+    def verbose_printer(self, group):
         print('ID:           ', group['id'])
         print('Name:         ', group['name'])
         print('Online:       ', group['online'])
@@ -79,16 +80,14 @@ class Show(Printer, base.Command):
 
     def setup_args(self, parser):
         parser.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='?')
-        parser.add_argument('-v', '--verbose', action='store_true')
+        super().setup_args(parser)
 
-    def run(self, args, groups=None):
-        """ Show group(s) """
-        if groups is None:
-            if args.ident:
-                groups = [args.api.get_by_id_or_name('groups', args.ident,
-                                                     expand=self.expands)]
-            else:
-                groups = args.api.get_pager('groups', expand=self.expands)
+    def run(self, args):
+        if args.ident:
+            groups = [self.api.get_by_id_or_name('groups', args.ident,
+                                                 expand=self.expands)]
+        else:
+            groups = self.api.get_pager('groups', expand=self.expands)
         for x in groups:
             self.printer(self.bundle_group(x))
 
@@ -111,7 +110,7 @@ class Create(base.Command):
             raise SystemExit("Name required")
 
         product = args.product or input('Product: ')
-        products = dict((x['name'], x) for x in args.api.get_pager('products'))
+        products = dict((x['name'], x) for x in self.api.get_pager('products'))
         if product not in products:
             if not product:
                 print("Product required")
@@ -124,7 +123,7 @@ class Create(base.Command):
 
         fw = args.firmware or input('Firmware: ')
         firmwares = dict((x['version'], x)
-                         for x in args.api.get_pager('firmwares',
+                         for x in self.api.get_pager('firmwares',
                                                 product=products[product]['id']))
         if fw not in firmwares:
             if not fw:
@@ -136,7 +135,7 @@ class Create(base.Command):
                 print("\t", x)
             raise SystemExit(1)
 
-        args.api.post('groups', {
+        self.api.post('groups', {
             "name": name,
             "product": products[product]['resource_uri'],
             "target_firmware": firmwares[fw]['resource_uri']
@@ -154,14 +153,14 @@ class Edit(base.Command):
         parser.add_argument('--firmware')
 
     def run(self, args):
-        group = args.api.get_by_id_or_name('groups', args.ident)
+        group = self.api.get_by_id_or_name('groups', args.ident)
         updates = {}
         if args.name:
             updates['name'] = args.name
         if args.firmware:
-            fw = args.api.get_by(['version'], 'firmwares', args.firmware)
+            fw = self.api.get_by(['version'], 'firmwares', args.firmware)
             updates['target_firmware'] = fw['resource_uri']
-        args.api.put('groups', group['id'], updates)
+        self.api.put('groups', group['id'], updates)
 
 
 class Delete(base.Command):
@@ -175,12 +174,12 @@ class Delete(base.Command):
 
     def run(self, args):
         for ident in args.ident:
-            group = args.api.get_by_id_or_name('groups', ident)
+            group = self.api.get_by_id_or_name('groups', ident)
             if not args.force and \
                not base.confirm('Delete group: %s' % group['name'],
                                 exit=False):
                 continue
-            args.api.delete('groups', group['id'])
+            self.api.delete('groups', group['id'])
 
 
 class Move(base.Command):
@@ -194,9 +193,9 @@ class Move(base.Command):
         parser.add_argument('-f', '--force', action="store_true")
 
     def run(self, args):
-        group = args.api.get_by_id_or_name('groups', args.ident)
-        account = args.api.get_by_id_or_name('accounts', args.new_account)
-        args.api.put('groups', group['id'],
+        group = self.api.get_by_id_or_name('groups', args.ident)
+        account = self.api.get_by_id_or_name('accounts', args.new_account)
+        self.api.put('groups', group['id'],
                      {"account": account['resource_uri']})
 
 
@@ -207,17 +206,17 @@ class Search(Printer, base.Command):
 
     def setup_args(self, parser):
         parser.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
-        parser.add_argument('-v', '--verbose', action='store_true')
+        super().setup_args(parser)
 
     def run(self, args):
-        search = args.SEARCH_CRITERIA
         fields = ['name', ('firmware', 'target_firmware.version'),
                   ('product', 'product.name'), ('account', 'account.name')]
-        results = list(args.api.search('groups', fields, search,
+        results = list(self.api.search('groups', fields, args.search,
                                        expand=self.expands))
         if not results:
-            raise SystemExit("No Results For: %s" % ' '.join(search))
-        self.show_cmd(args, groups=results)
+            raise SystemExit("No Results For: %s" % ' '.join(args.search))
+        for x in results:
+            self.printer(self.bundle_group(x))
 
 
 class Groups(base.Command):
@@ -225,13 +224,13 @@ class Groups(base.Command):
 
     name = 'groups'
 
-    def __init__(self):
-        super().__init__()
-        self.add_subcommand(Show(), default=True)
-        self.add_subcommand(Create())
-        self.add_subcommand(Edit())
-        self.add_subcommand(Delete())
-        self.add_subcommand(Move())
-        self.add_subcommand(Search())
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_subcommand(Show, default=True)
+        self.add_subcommand(Create)
+        self.add_subcommand(Edit)
+        self.add_subcommand(Delete)
+        self.add_subcommand(Move)
+        self.add_subcommand(Search)
 
 command_classes = [Groups]

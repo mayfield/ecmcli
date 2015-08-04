@@ -15,7 +15,7 @@ from .commands import base
 #import logging;logging.basicConfig(level=0)
 
 command_modules = [
-    #'accounts',
+    'accounts',
     #'alerts',
     #'config',
     #'flashleds',
@@ -54,15 +54,14 @@ class ECM(base.Command):
 
 
 def main():
-    ecm = ECM()
+    root = ECM(api.ECMService())
     for modname in command_modules:
         module = importlib.import_module('.%s' % modname, 'ecmcli.commands')
         for Command in module.command_classes:
-            ecm.add_subcommand(Command())
-    args = ecm.argparser.parse_args()
-    ecm.api = api.ECMService(args.site, username=args.username,
-                             password=args.password)
+            root.add_subcommand(Command)
+    args = root.argparser.parse_args()
+    root.api.connect(args.site, username=args.username, password=args.password)
     try:
-        ecm.invoke(args)
+        root.invoke(args)
     except KeyboardInterrupt:
         sys.exit(1)

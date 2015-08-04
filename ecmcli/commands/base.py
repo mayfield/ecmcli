@@ -28,15 +28,14 @@ class Command(object):
 
     def prerun(self, args):
         """ Hook to do thing prior to any invocation. """
-        if not hasattr(args, 'api'):
-            args.api = self.api
+        pass
 
     def run(self, args):
         """ Primary entrypoint for command exec. """
         pass
 
-    def __init__(self):
-        self.api = None
+    def __init__(self, api):
+        self.api = api
         self.subcommands = []
         self.subparsers = None
         self.default_subcommand = None
@@ -74,16 +73,15 @@ class Command(object):
         understand expansion rules. """
         args = shlex.split(line)[1:]
         save = self.argparser.error
-        self.argparser.error = lambda x: print(x)
+        self.argparser.error = lambda x: print('ERROR', x)
         try:
             parsed = self.argparser.parse_known_args(args)
         finally:
             self.argparser.error = save
-        print("TEXT:", text)
-        print("LINE:", line)
-        print("PARSED:", parsed)
+        #print("TEXT:", text)
+        #print("LINE:", line)
+        #print("PARSED:", parsed)
         if not parsed and self.argparser:
-            print
             return [x for x in self.subparsers.choices if x.startswith(text)]
         return self.complete(text, args, begin, end)
 
@@ -102,7 +100,8 @@ class Command(object):
         self.prerun(args)
         self.run(args)
 
-    def add_subcommand(self, command, default=False):
+    def add_subcommand(self, command_class, default=False):
+        command = command_class(self.api)
         if command.name is None:
             raise TypeError('Cannot add unnamed command: %s' % command)
         if not self.subparsers:
@@ -127,34 +126,3 @@ class Command(object):
         self.subparsers._name_parser_map[command.name] = command.argparser
         command.argparser.set_defaults(command=command)
         self.subcommands.append(command)
-
-
-class ArgParser(argparse.ArgumentParser):
-    """ Add some standardized notions of subcommands to the argument parser.
-    Using this class simply helps consistency for the bulk of commands that
-    make use of subcommands. """
-
-    def __init__(self, *args, **kwargs):
-        Formatter = argparse.RawDescriptionHelpFormatter
-        self.subcmd_parser = None
-        super().__init__(*args, formatter_class=Formatter, **kwargs)
-
-    def complete(self, last, fullline, begidx, endidx):
-        """ Attempt to autocomplete the current input buffer based on our
-        arugment parsing configuration.  Any arguments that represent an
-        incomplete key/value combo where the key is complete will defer to
-        a completer function on the argument itself.  This allows type
-        specific completion when the user wants to see the available options
-        for a given argument. """
-        args = shlex.split(fullline)[1:]
-        save = self.argparser.error
-        self.argparser.error = lambda x: print(x)
-        try:
-            parsed = self.argparser.parse_known_args(args)
-        finally:
-            self.argparser.error = save
-        print("LAST:", last)
-        print("FULLLINE:", fullline)
-        print("PARSED:", parsed)
-        if not parsed and self.subcmd_parser:
-            return [x for x in self.subcmd_parser.choices if x.startswith(last)]

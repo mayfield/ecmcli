@@ -142,14 +142,16 @@ class ECMService(syndicate.Service):
     api_prefix = '/api/v1'
     session_file = os.path.expanduser('~/.ecmcli_session')
 
-    def __init__(self, site, username=None, password=None):
+    def __init__(self):
+        super().__init__(uri='nope', urn=self.api_prefix, serializer='htmljson')
+
+    def connect(self, site=None, username=None, password=None):
         if site:
             self.site = site
         self.account = None
         self.hard_username = username
         self.hard_password = password
-        super().__init__(uri=self.site, urn=self.api_prefix,
-                         serializer='htmljson')
+        self.uri = self.site
         self.load_session(ECMLogin.gen_signature(username))
         if not self.session_id:
             self.reset_auth()

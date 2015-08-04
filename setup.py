@@ -16,7 +16,7 @@ def long_desc():
 
 setup(
     name='ecmcli',
-    version='0.5.1',
+    version='0.6.0',
     description='Command Line Interface for Cradlepoint ECM',
     author='Justin Mayfield',
     author_email='tooker@gmail.com',
