@@ -13,14 +13,12 @@ class WanRate(base.Command):
     name = 'wanrate'
     sample_delay = 1
 
-    def init_argparser(self):
-        parser = base.ArgParser(self.name)
+    def setup_args(self, parser):
         parser.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='+')
         parser.add_argument('-s', '--sampletime',
                             help='How long to wait between sample captures '
                             'in seconds', type=float,
                             default=self.sample_delay)
-        return parser
 
     def run(self, args):
         routers = [self.api.get_by_id_or_name('routers', x)

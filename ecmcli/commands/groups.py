@@ -74,7 +74,7 @@ class Printer(object):
 
 
 class Show(Printer, base.Command):
-    """ Show group(s) """
+    """ Show group(s). """
 
     name = 'show'
 
@@ -93,7 +93,7 @@ class Show(Printer, base.Command):
 
 
 class Create(base.Command):
-    """ Create a new group
+    """ Create a new group.
     A group mostly represents configuration for more than one device, but
     also manages settings such as alerts and log acquisition. """
 
@@ -143,7 +143,7 @@ class Create(base.Command):
 
 
 class Edit(base.Command):
-    """ Edit group attributes """
+    """ Edit group attributes. """
 
     name = 'edit'
 
@@ -164,7 +164,7 @@ class Edit(base.Command):
 
 
 class Delete(base.Command):
-    """ Delete one or more groups """
+    """ Delete one or more groups. """
 
     name = 'delete'
 
@@ -183,7 +183,7 @@ class Delete(base.Command):
 
 
 class Move(base.Command):
-    """ Move group to a different account """
+    """ Move group to a different account. """
 
     name = 'move'
 
@@ -200,7 +200,7 @@ class Move(base.Command):
 
 
 class Search(Printer, base.Command):
-    """ Search for groups """
+    """ Search for groups. """
 
     name = 'search'
 
@@ -220,7 +220,7 @@ class Search(Printer, base.Command):
 
 
 class Groups(base.Command):
-    """ Manage ECM Groups """
+    """ Manage ECM Groups. """
 
     name = 'groups'
 

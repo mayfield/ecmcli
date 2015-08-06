@@ -1,11 +1,12 @@
 """
-Anaylize and Report ECM Alerts.
+Analyze and Report ECM Alerts.
 """
 
 import collections
 import humanize
 import sys
 from . import base
+
 
 def since(dt):
     """ Return humanized time since for an absolute datetime. """
@@ -14,15 +15,13 @@ def since(dt):
 
 
 class Alerts(base.Command):
-    """ Anaylize and Report ECM Alerts """
+    """ Analyze and Report ECM Alerts """
 
     name = 'alerts'
 
-    def init_argparser(self):
-        parser = base.ArgParser(self.name)
+    def setup_args(self, parser):
         parser.add_argument('-e', '--expand', action='store_true',
                             help="Expand each alert")
-        return parser
 
     def run(self, args):
         by_type = collections.OrderedDict()

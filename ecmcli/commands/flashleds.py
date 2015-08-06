@@ -13,10 +13,6 @@ class FlashLEDS(base.Command):
     name = 'flashleds'
     min_flash_delay = 0.200
 
-    def init_argparser(self):
-        parser = base.ArgParser(self.name)
-        return parser
-
     def run(self, args):
         routers = self.api.get_pager('routers')
         ids = []

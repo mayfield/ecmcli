@@ -6,17 +6,15 @@ from . import base
 
 
 class Logs(base.Command):
-    """ Show (or clear) router logs """
+    """ Show or clear router logs. """
 
     name = 'logs'
     levels = ['debug', 'info', 'warning', 'error', 'critical']
 
-    def init_argparser(self):
-        parser = base.ArgParser(self.name)
+    def setup_args(self, parser):
         parser.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='*')
         parser.add_argument('--clear', action='store_true', help="Clear logs")
         parser.add_argument('-l', '--level', choices=self.levels)
-        return parser
 
     def run(self, args):
         if args.idents:

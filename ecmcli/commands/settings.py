@@ -6,20 +6,19 @@ from . import base
 
 
 class Settings(base.Command):
+    """ Display and edit account and group settings. """
 
     name = 'settings'
     expands = ','.join([
         'setting'
     ])
 
-    def init_argparser(self):
-        parser = base.ArgParser(self.name)
+    def setup_args(self, parser):
         or_group = parser.add_mutually_exclusive_group()
         or_group.add_argument('--group', metavar='GROUP_ID_OR_NAME')
         or_group.add_argument('--account', metavar='ACCOUNT_ID_OR_NAME')
         parser.add_argument('get_or_set', metavar='GET_OR_SET', nargs='?',
                             help='key or key=value')
-        return parser
 
     def run(self, args):
         if args.group:

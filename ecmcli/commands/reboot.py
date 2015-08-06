@@ -6,15 +6,13 @@ from . import base
 
 
 class Reboot(base.Command):
-    """ Reboot connected router(s) """
+    """ Reboot connected router(s). """
 
     name = 'reboot'
 
-    def init_argparser(self):
-        parser = base.ArgParser(self.name)
+    def setup_args(self, parser):
         parser.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='*')
         parser.add_argument('-f', '--force', action='store_true')
-        return parser
 
     def run(self, args):
         if args.idents:

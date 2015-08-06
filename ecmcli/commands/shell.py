@@ -1,5 +1,5 @@
 """
-Pull data or interact with the shell of ECM clients.
+Interact with the shell of ECM clients.
 """
 
 import contextlib
@@ -15,6 +15,7 @@ from . import base
 
 
 class Shell(base.Command):
+    """ Emulate an interactive shell to a remote router. """
 
     name = 'shell'
     poll_max_retry = 300  # Max secs for polling when no activity is detected.
@@ -23,18 +24,17 @@ class Shell(base.Command):
     raw_in = sys.stdin.buffer.raw
     raw_out = sys.stdout.buffer.raw
 
-    def init_argparser(self):
-        parser = base.ArgParser(self.name)
+    def setup_args(self, parser):
         parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
         parser.add_argument('-n', '--new', action='store_true',
                             help='Start a new session')
-        return parser
 
     def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident)
         print("Connecting to: %s (%s)" % (router['name'], router['id']))
         print("Type ~~ rapidly to close session")
-        sessionid = time.time() if args.new else self.api.session_id
+        sessionid = int(time.time() * 10000) if args.new else \
+                    self.api.session_id
         with self.setup_tty():
             self.session(router, sessionid)
 
@@ -82,7 +82,6 @@ class Shell(base.Command):
     def session(self, router, sessionid):
         rid = router['id']
         w_save, h_save = None, None
-        print(sessionid)
         res = 'remote/control/csterm/ecmcli-%s/' % sessionid
         in_data = '\n'
         poll_timeout = self.key_idle_timeout  # somewhat arbitrary

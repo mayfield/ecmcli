@@ -16,17 +16,17 @@ from .commands import base
 
 command_modules = [
     'accounts',
-    #'alerts',
-    #'config',
-    #'flashleds',
+    'alerts',
+    'config',
+    'flashleds',
     'groups',
-    #'logs',
-    #'reboot',
+    'logs',
+    'reboot',
     #'routers',
-    #'settings',
-    #'shell',
-    #'users',
-    #'wanrate'
+    'settings',
+    'shell',
+    'users',
+    'wanrate'
 ]
 
 

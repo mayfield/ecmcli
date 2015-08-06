@@ -19,16 +19,14 @@ def walk_config(key, config):
 
 
 class Config(base.Command):
-    """ Anaylize and Report ECM Alerts """
+    """ Get and set configs for routers and groups. """
 
     name = 'config'
 
-    def init_argparser(self):
-        parser = base.ArgParser(self.name)
+    def setup_args(self, parser):
         parser.add_argument('--group', metavar='ID_OR_NAME')
         parser.add_argument('get_or_set', metavar='GET_OR_SET', nargs='?',
                             help='key or key=value')
-        return parser
 
     def run(self, args):
         routers = self.api.get_pager('routers')
