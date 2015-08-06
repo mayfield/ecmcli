@@ -3,6 +3,7 @@ Foundation components for commands.
 """
 
 import argparse
+import itertools
 import shlex
 
 
@@ -32,15 +33,29 @@ class Command(object):
 
     def run(self, args):
         """ Primary entrypoint for command exec. """
-        pass
+        self.argparser.print_usage()
+        raise SystemExit(1)
 
-    def __init__(self, api):
-        self.api = api
+    def __init__(self, parent=None, **context):
+        self.inject_context(parent, context)
+        self.parent = parent
+        self.depth = (parent.depth + 1) if parent else 0
         self.subcommands = []
         self.subparsers = None
         self.default_subcommand = None
         self.argparser = self.create_argparser()
         self.setup_args(self.argparser)
+
+    def inject_context(self, parent, context):
+        """ Map context attributes from the parent and from the context
+        argument into this instance (as attributes). """
+        self.context_keys = set(context.keys())
+        for key, value in context.items():
+            setattr(self, key, value)
+        if parent:
+            for key in parent.context_keys:
+                setattr(self, key, getattr(parent, key))
+            self.context_keys |= parent.context_keys
 
     def create_argparser(self):
         """ Factory for arg parser, can be replaced with any ArgParser compat
@@ -88,27 +103,42 @@ class Command(object):
     def invoke(self, args):
         """ If a subparser is present and configured  we forward invocation to
         the correct subcommand method. If all else fails we call run(). """
+        commands = self.get_commands_from(args)
         if self.subparsers:
-            if not args.subcommand and self.default_subcommand:
-                args.subcommand = self.default_subcommand.name
-                defaults = self.default_subcommand.argparser.parse_args([])
-                args.__dict__.update(defaults.__dict__)
-            if args.subcommand:
+            try:
+                command = commands[self.depth]
+            except IndexError:
+                if self.default_subcommand:
+                    self.default_subcommand.argparser.parse_args([], namespace=args)
+                    self.invoke(args)  # retry
+                    return
+            else:
                 self.prerun(args)
-                args.command.invoke(args)
+                command.invoke(args)
                 return
         self.prerun(args)
         self.run(args)
 
+    def get_commands_from(self, args):
+        """ We have to code the key names for each depth.  This method scans
+        for each level and returns a list of the command arguments. """
+        commands = []
+        for i in itertools.count(0):
+            try:
+                commands.append(getattr(args, 'command%d' % i))
+            except AttributeError:
+                break
+        return commands
+
     def add_subcommand(self, command_class, default=False):
-        command = command_class(self.api)
+        command = command_class(parent=self)
         if command.name is None:
             raise TypeError('Cannot add unnamed command: %s' % command)
         if not self.subparsers:
             desc = 'Provide a subcommand argument to perform an operation.'
             addsub = self.argparser.add_subparsers
             self.subparsers = addsub(title='subcommands', description=desc,
-                                     dest='subcommand', metavar='COMMAND')
+                                     metavar='COMMAND')
         if default:
             if self.default_subcommand:
                 raise ValueError("Default subcommand already exists.")
@@ -124,5 +154,5 @@ class Command(object):
         action = self.subparsers._ChoicesPseudoAction(command.name, (), help)
         self.subparsers._choices_actions.append(action)
         self.subparsers._name_parser_map[command.name] = command.argparser
-        command.argparser.set_defaults(command=command)
+        command.argparser.set_defaults(**{'command%d' % self.depth: command})
         self.subcommands.append(command)

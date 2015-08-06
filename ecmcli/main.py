@@ -9,7 +9,7 @@ to use this tool.  For more info go to https://cradlepointecm.com/.
 import importlib
 import pkg_resources
 import sys
-from . import api, commands, shell
+from . import api, shell
 from .commands import base
 
 #import logging;logging.basicConfig(level=0)
@@ -54,7 +54,7 @@ class ECM(base.Command):
 
 
 def main():
-    root = ECM(api.ECMService())
+    root = ECM(api=api.ECMService())
     for modname in command_modules:
         module = importlib.import_module('.%s' % modname, 'ecmcli.commands')
         for Command in module.command_classes:
