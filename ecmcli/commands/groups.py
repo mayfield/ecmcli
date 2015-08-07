@@ -30,9 +30,13 @@ class Printer(object):
     def bundle_group(self, group):
         group['target'] = '%s (%s)' % (group['product']['name'],
                                        group['target_firmware']['version'])
-        group['settings'] = dict((x['setting']['name'] + ':', x['value'])
-                                 for x in group['settings_bindings']
-                                 if x['value'] is not None)
+        if not isinstance(group['settings_bindings'], str):
+            group['settings'] = dict((x['setting']['name'] + ':', x['value'])
+                                     for x in group['settings_bindings']
+                                     if not isinstance(x, str) and \
+                                        x['value'] is not None)
+        else:
+            group['settings'] = {}
         stats = group['statistics']
         group['online'] = stats['online_count']
         group['offline'] = stats['offline_count']
@@ -55,6 +59,7 @@ class Printer(object):
         print()
 
     def terse_printer(self, group):
+        fmt = '%(name)-30s %(account)-16s %(target)-16s %(online)-5s'
         if not self.printed_header:
             self.printed_header = True
             info = {
@@ -63,14 +68,14 @@ class Printer(object):
                 "target": 'TARGET',
                 "online": 'ONLINE'
             }
-        else:
-            info = {
-                "name": '%s (%s)' % (group['name'], group['id']),
-                "account": group['account']['name'],
-                "target": group['target'],
-                "online": '%s/%s' % (group['online'], group['total'])
-            }
-        print('%(name)-30s %(account)-16s %(target)-16s %(online)-5s' % info)
+            print(fmt % info)
+        info = {
+            "name": '%s (%s)' % (group['name'], group['id']),
+            "account": group['account']['name'],
+            "target": group['target'],
+            "online": '%s/%s' % (group['online'], group['total'])
+        }
+        print(fmt % info)
 
 
 class Show(Printer, base.Command):

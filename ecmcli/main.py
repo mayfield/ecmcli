@@ -22,7 +22,7 @@ command_modules = [
     'groups',
     'logs',
     'reboot',
-    #'routers',
+    'routers',
     'settings',
     'shell',
     'users',
@@ -36,16 +36,18 @@ class ECM(base.Command):
 
     def setup_args(self, parser):
         distro = pkg_resources.get_distribution('ecmcli')
-        parser.add_argument('--username')
-        parser.add_argument('--password')
-        parser.add_argument('--account', help='Limit activity to this account')
-        parser.add_argument('--site', help='E.g. https://cradlepointecm.com')
+        parser.add_argument('--api_username')
+        parser.add_argument('--api_password')
+        parser.add_argument('--api_account', help='Limit activity to this '
+                            'account')
+        parser.add_argument('--api_site',
+                            help='E.g. https://cradlepointecm.com')
         parser.add_argument('--version', action='version',
                             version=distro.version)
 
     def prerun(self, args):
-        if args.account:
-            account = self.api.get_by_id_or_name('accounts', args.account)
+        if args.api_account:
+            account = self.api.get_by_id_or_name('accounts', args.api_account)
             self.api.account = account['id']
         super().prerun(args)
 
@@ -60,7 +62,8 @@ def main():
         for Command in module.command_classes:
             root.add_subcommand(Command)
     args = root.argparser.parse_args()
-    root.api.connect(args.site, username=args.username, password=args.password)
+    root.api.connect(args.api_site, username=args.api_username,
+                     password=args.api_password)
     try:
         root.invoke(args)
     except KeyboardInterrupt:

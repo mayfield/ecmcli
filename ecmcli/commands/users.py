@@ -51,9 +51,11 @@ class Common(object):
         print()
 
     def terse_printer(self, user):
+        fmt = '%(username)-28s %(name)-23s %(account_desc)-21s %(roles)-17s ' \
+              '%(id)-6s %(email)s'
         if not self.printed_header:
             self.printed_header = True
-            user = {
+            header = {
                 "username": 'USERNAME',
                 "name": 'FULL NAME',
                 "account_desc": 'ACCOUNT',
@@ -61,12 +63,11 @@ class Common(object):
                 "id": 'ID',
                 "email": 'EMAIL'
             }
-        else:
-            user = user.copy()
-            account = user['profile']['account']
-            user['account_desc'] = '%s (%s)' % (account['name'], account['id'])
-        print('%(username)-28s %(name)-23s %(account_desc)-21s %(roles)-17s '
-              '%(id)-6s %(email)s' % user)
+            print(fmt % header)
+        user = user.copy()
+        account = user['profile']['account']
+        user['account_desc'] = '%s (%s)' % (account['name'], account['id'])
+        print(fmt % user)
 
 
 class Show(Common, base.Command):

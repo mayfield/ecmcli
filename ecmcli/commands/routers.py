@@ -6,18 +6,9 @@ import humanize
 from . import base
 
 
-def since(dt):
-    """ Return humanized time since for an absolute datetime. """
-    if dt is None:
-        return ''
-    since = dt.now(tz=dt.tzinfo) - dt
-    return humanize.naturaltime(since)[:-4]
+class Printer(base.Command):
+    """ Mixin for printer commands. """
 
-
-class Routers(base.Command):
-    """ Manage ECM Routers. """
-
-    name = 'routers'
     terse_expands = ','.join([
         'account',
         'group'
@@ -31,61 +22,16 @@ class Routers(base.Command):
         'featurebindings'
     ])
 
-    def init_argparser(self):
-        parser = base.ArgParser(self.name, subcommands=True)
+    def setup_args(self, parser):
+        parser.add_argument('-v', '--verbose', action='store_true')
+        super().setup_args(parser)
 
-        s = parser.add_subcommand('show', self.show_cmd, default=True)
-        s.add_argument('ident', metavar='ROUTER_ID_OR_NAME', nargs='?')
-        s.add_argument('-v', '--verbose', action='store_true')
-
-        p = parser.add_subcommand('edit', self.edit_cmd)
-        p.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
-        p.add_argument('--name')
-        p.add_argument('--desc')
-        p.add_argument('--asset_id')
-        p.add_argument('--custom1')
-        p.add_argument('--custom2')
-
-        p = parser.add_subcommand('move', self.move_cmd)
-        p.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
-        p.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
-
-        p = parser.add_subcommand('delete', self.delete_cmd)
-        p.add_argument('ident', metavar='ROUTER_ID_OR_NAME', nargs='+')
-        p.add_argument('-f', '--force', action='store_true')
-
-        p = parser.add_subcommand('groupassign', self.groupassign_cmd)
-        p.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
-        p.add_argument('new_group', metavar='NEW_GROUP_ID_OR_NAME')
-        p.add_argument('-f', '--force', action='store_true')
-
-        p = parser.add_subcommand('groupunassign', self.groupunassign_cmd)
-        p.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
-
-        p = parser.add_subcommand('search', self.search_cmd)
-        p.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
-        p.add_argument('-v', '--verbose', action='store_true')
-
-        return parser
-
-    def prerun(self, args):
-        self.verbose = getattr(args, 'verbose', False)
-        if self.verbose:
-            self.expands = self.verbose_expands
-            self.printer = self.verbose_printer
-        else:
-            self.expands = self.terse_expands
-            self.printer = self.terse_printer
-
-    def show_cmd(self, args, routers=None):
-        """ Display routers """
-        if routers is None:
-            if args.ident:
-                routers = [self.api.get_by_id_or_name('routers', args.ident,
-                           expand=self.expands)]
-            else:
-                routers = self.api.get_pager('routers', expand=self.expands)
-        self.printer(routers)
+    def since(self, dt):
+        """ Return humanized time since for an absolute datetime. """
+        if dt is None:
+            return ''
+        since = dt.now(tz=dt.tzinfo) - dt
+        return humanize.naturaltime(since)[:-4]
 
     def verbose_printer(self, routers):
         fields = {
@@ -97,7 +43,7 @@ class Routers(base.Command):
             'desc': 'Description',
             'entitlements': 'Entitlements',
             'firmware_info': 'Firmware',
-            'group_info': 'Group',
+            'group_name': 'Group',
             'id': 'ID',
             'ip_address': 'IP Address',
             'joined': 'Joined',
@@ -124,10 +70,10 @@ class Routers(base.Command):
                 print()
             print('*' * 10, '%s (%s) - %s - %s' % (x['name'], x['id'], x['mac'],
                   x['ip_address']), '*' * 10)
-            x['since'] = since(x['state_ts'])
-            x['joined'] = since(x['create_ts']) + ' ago'
+            x['since'] = self.since(x['state_ts'])
+            x['joined'] = self.since(x['create_ts']) + ' ago'
             x['account_info'] = '%s (%s)' % (x['account']['name'], x['account']['id'])
-            x['group_info'] = x['group']['name'] if x['group'] else ''
+            x['group_name'] = self.group_name(x['group'])
             x['product_info'] = x['product']['name']
             fw = x['actual_firmware']
             x['firmware_info'] = fw['version'] if fw else '<unsupported>'
@@ -142,6 +88,17 @@ class Routers(base.Command):
             for key, label in sorted(fields.items(), key=lambda x: x[1]):
                 print(fmt % (label, x[key]))
 
+    def group_name(self, group):
+        """ Sometimes the group is empty or a URN if the user is not
+        authorized to see it.  Return the best extrapolation of the
+        group name. """
+        if not group:
+            return ''
+        elif isinstance(group, str):
+            return '<id:%s>' % group.rsplit('/')[-2]
+        else:
+            return group['name']
+
     def terse_printer(self, routers):
         fmt = '%(name_info)-24s %(account_name)-18s %(group_name)-22s ' \
               '%(ip_address)-16s %(state)s'
@@ -155,11 +112,69 @@ class Routers(base.Command):
         for x in routers:
             x['name_info'] = '%s (%s)' % (x['name'], x['id'])
             x['account_name'] = x['account']['name']
-            x['group_name'] = x['group']['name'] if x['group'] else ''
+            x['group_name'] = self.group_name(x['group'])
             print(fmt % x)
 
-    def groupassign_cmd(self, args):
-        """ Assign a router to a [new] group """
+    def prerun(self, args):
+        if args.verbose:
+            self.expands = self.verbose_expands
+            self.printer = self.verbose_printer
+        else:
+            self.expands = self.terse_expands
+            self.printer = self.terse_printer
+        super().prerun(args)
+
+
+class Show(Printer, base.Command):
+    """ Display routers. """
+
+    name = 'show'
+
+    def setup_args(self, parser):
+        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME', nargs='?')
+        super().setup_args(parser)
+
+    def run(self, args):
+        if args.ident:
+            routers = [self.api.get_by_id_or_name('routers', args.ident,
+                       expand=self.expands)]
+        else:
+            routers = self.api.get_pager('routers', expand=self.expands)
+        self.printer(routers)
+
+
+class Search(Printer, base.Command):
+    """ Search for routers. """
+
+    name = 'search'
+
+    def setup_args(self, parser):
+        parser.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
+        super().setup_args(parser)
+
+    def run(self, args):
+        fields = ['name', 'desc', 'mac', ('account', 'account.name'), 'asset_id',
+                  'custom1', 'custom2', ('group', 'group.name'),
+                  ('firmware', 'actual_firmware.version'), 'ip_address',
+                  ('product', 'product.name'), 'serial_number', 'state']
+        results = list(self.api.search('routers', fields, args.search,
+                                       expand=self.expands))
+        if not results:
+            raise SystemExit("No results for: %s" % ' '.join(args.search))
+        self.printer(results)
+
+
+class GroupAssign(base.Command):
+    """ Assign a router to a [new] group. """
+
+    name = 'groupassign'
+
+    def setup_args(self, parser):
+        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
+        parser.add_argument('new_group', metavar='NEW_GROUP_ID_OR_NAME')
+        parser.add_argument('-f', '--force', action='store_true')
+
+    def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident,
                                             expand='group')
         group = self.api.get_by_id_or_name('groups', args.new_group)
@@ -169,13 +184,34 @@ class Routers(base.Command):
         self.api.put('routers', router['id'],
                      {"group": group['resource_uri']})
 
-    def groupunassign_cmd(self, args):
-        """ Remove a router from its group """
+
+class GroupUnassign(base.Command):
+    """ Remove a router from its group. """
+
+    name = 'groupunassign'
+
+    def setup_args(self, parser):
+        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
+
+    def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident)
         self.api.put('routers', router['id'], {"group": None})
 
-    def edit_cmd(self, args):
-        """ Edit a group's attributes """
+
+class Edit(base.Command):
+    """ Edit a group's attributes. """
+
+    name = 'edit'
+
+    def setup_args(self, parser):
+        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
+        parser.add_argument('--name')
+        parser.add_argument('--desc')
+        parser.add_argument('--asset_id')
+        parser.add_argument('--custom1')
+        parser.add_argument('--custom2')
+
+    def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident)
         value = {}
         fields = ['name', 'desc', 'asset_id', 'custom1', 'custom2']
@@ -185,15 +221,33 @@ class Routers(base.Command):
                 value[x] = v
         self.api.put('routers', router['id'], value)
 
-    def move_cmd(self, args):
-        """ Move a router to different account """
+
+class Move(base.Command):
+    """ Move a router to different account """
+
+    name = 'move'
+
+    def setup_args(self, parser):
+        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
+        parser.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
+
+    def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident)
         account = self.api.get_by_id_or_name('accounts', args.new_account)
         self.api.put('routers', router['id'],
                      {"account": account['resource_uri']})
 
-    def delete_cmd(self, args):
-        """ Delete (unregister) a router from ECM """
+
+class Delete(base.Command):
+    """ Delete (unregister) a router from ECM """
+
+    name = 'delete'
+
+    def setup_args(self, parser):
+        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME', nargs='+')
+        parser.add_argument('-f', '--force', action='store_true')
+
+    def run(self, args):
         for id_or_name in args.ident:
             router = self.api.get_by_id_or_name('routers', id_or_name)
             if not args.force and \
@@ -202,16 +256,19 @@ class Routers(base.Command):
                 continue
             self.api.delete('routers', router['id'])
 
-    def search_cmd(self, args):
-        """ Search for routers """
-        fields = ['name', 'desc', 'mac', ('account', 'account.name'), 'asset_id',
-                  'custom1', 'custom2', ('group', 'group.name'),
-                  ('firmware', 'actual_firmware.version'), 'ip_address',
-                  ('product', 'product.name'), 'serial_number', 'state']
-        results = list(self.api.search('routers', fields, args.search,
-                                       expand=self.expands))
-        if not results:
-            raise SystemExit("No results for: %s" % ' '.join(args.search))
-        self.show_cmd(args, routers=results)
+
+class Routers(base.Command):
+    """ Manage ECM Routers. """
+
+    name = 'routers'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_subcommand(Show, default=True)
+        self.add_subcommand(Search)
+        self.add_subcommand(Move)
+        self.add_subcommand(GroupAssign)
+        self.add_subcommand(GroupUnassign)
+        self.add_subcommand(Delete)
 
 command_classes = [Routers]
