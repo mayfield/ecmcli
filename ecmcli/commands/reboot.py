@@ -5,7 +5,7 @@ Reboot connected router(s).
 from . import base
 
 
-class Reboot(base.Command):
+class Reboot(base.ECMCommand):
     """ Reboot connected router(s). """
 
     name = 'reboot'

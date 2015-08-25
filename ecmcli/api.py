@@ -108,7 +108,10 @@ class ECMLogin(LoginAuth):
 
     def setup(self, username, password):
         self.login = None
-        self.username = username or input('Username: ')
+        try:
+            self.username = username or input('Username: ')
+        except RuntimeError:  # Readline (input) is not reentrant.
+            raise Unauthorized('Unable to login in this context')
         self.req_kwargs = dict(data=self.serializer({
             "username": self.username,
             "password": password or getpass.getpass()
@@ -136,14 +139,74 @@ class ECMLogin(LoginAuth):
         return key and hashlib.sha256(key.encode()).hexdigest()
 
 
-class ECMService(syndicate.Service):
+class Eventer(object):
+    """ Very simple event framework. """
+
+    def __init__(self, *args, **kwargs):
+        self.events = {}
+        super().__init__(*args, **kwargs)
+
+    def add_events(self, events):
+        """ Setup events for this instance.  Just a list of strings. """
+        for x in events:
+            self.events.setdefault(x, [])
+
+    def add_listener(self, event, callback, single=False, priority=None):
+        event_stack = self.events[event]
+        if priority is None:
+            try:
+                priority = event_stack[-1]['priority'] + 1
+            except IndexError:
+                priority = 1
+        event_stack.append({
+            "callback": callback,
+            "single": single,
+            "priority": priority
+        })
+        event_stack.sort(key=lambda x: x['priority'])
+
+    def remove_listener(self, event, callback, single=None, priority=None):
+        """ Remove the event listener matching the signature used for adding
+        it.  This will remove at most one entry meeting the signature
+        requirements. """
+        event_stack = self.events[event]
+        for x in event_stack:
+            if x['callback'] is callback and \
+               (single is not None and x['single'] == single) and \
+               (priority is not None and x['priority'] == priority):
+                event_stack.remove(x)
+                break
+        else:
+            raise KeyError('Listener not found for "%s": %s'  % (event,
+                           callback))
+
+    def fire_event(self, event, *args, **kwargs):
+        """ Execute the listeners for this event passing any arguments
+        along. """
+        remove = []
+        event_stack = self.events[event]
+        for x in event_stack:
+            x['callback'](*args, **kwargs)
+            if x['single']:
+                remove.append(x)
+        for x in remove:
+            event_stack.remove(x)
+
+
+class ECMService(Eventer, syndicate.Service):
 
     site = 'https://cradlepointecm.com'
     api_prefix = '/api/v1'
     session_file = os.path.expanduser('~/.ecmcli_session')
 
     def __init__(self):
-        super().__init__(uri='nope', urn=self.api_prefix, serializer='htmljson')
+        super().__init__(uri='nope', urn=self.api_prefix,
+                         serializer='htmljson')
+        self.add_events([
+            'start_request',
+            'finish_request',
+            'reset_auth'
+        ])
 
     def connect(self, site=None, username=None, password=None):
         if site:
@@ -159,6 +222,7 @@ class ECMService(syndicate.Service):
             self.ident = self.get('login')
 
     def reset_auth(self):
+        self.fire_event('reset_auth')
         self.reset_session()
         auth = ECMLogin(url='%s%s/login/' % (self.site, self.api_prefix))
         auth.setup(self.hard_username, self.hard_password)
@@ -207,6 +271,7 @@ class ECMService(syndicate.Service):
 
     def do(self, *args, **kwargs):
         """ Wrap some session and error handling around all API actions. """
+        self.fire_event('start_request', args=args, kwargs=kwargs)
         if self.account is not None:
             kwargs['account'] = self.account
         try:
@@ -219,6 +284,7 @@ class ECMService(syndicate.Service):
             self.reset_auth()
             result = super().do(*args, **kwargs)
         self.check_session()
+        self.fire_event('finish_request', result=result)
         return result
 
     def handle_error(self, error):

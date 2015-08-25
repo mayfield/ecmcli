@@ -6,7 +6,7 @@ import humanize
 from . import base
 
 
-class Printer(base.Command):
+class Printer(object):
     """ Mixin for printer commands. """
 
     terse_expands = ','.join([
@@ -23,7 +23,7 @@ class Printer(base.Command):
     ])
 
     def setup_args(self, parser):
-        parser.add_argument('-v', '--verbose', action='store_true')
+        self.add_argument('-v', '--verbose', action='store_true')
         super().setup_args(parser)
 
     def since(self, dt):
@@ -125,13 +125,14 @@ class Printer(base.Command):
         super().prerun(args)
 
 
-class Show(Printer, base.Command):
+class Show(Printer, base.ECMCommand):
     """ Display routers. """
 
     name = 'show'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME', nargs='?')
+        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME', nargs='?',
+                          complete=self.make_completer('routers', 'name'))
         super().setup_args(parser)
 
     def run(self, args):
@@ -143,36 +144,40 @@ class Show(Printer, base.Command):
         self.printer(routers)
 
 
-class Search(Printer, base.Command):
+class Search(Printer, base.ECMCommand):
     """ Search for routers. """
 
     name = 'search'
+    fields = ['name', 'desc', 'mac', ('account', 'account.name'), 'asset_id',
+              'custom1', 'custom2', ('group', 'group.name'),
+              ('firmware', 'actual_firmware.version'), 'ip_address',
+              ('product', 'product.name'), 'serial_number', 'state']
 
     def setup_args(self, parser):
-        parser.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
+        searcher = self.make_searcher('routers', self.fields)
+        self.lookup = searcher.lookup
+        self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+',
+                          help=searcher.help, complete=searcher.completer)
         super().setup_args(parser)
 
     def run(self, args):
-        fields = ['name', 'desc', 'mac', ('account', 'account.name'), 'asset_id',
-                  'custom1', 'custom2', ('group', 'group.name'),
-                  ('firmware', 'actual_firmware.version'), 'ip_address',
-                  ('product', 'product.name'), 'serial_number', 'state']
-        results = list(self.api.search('routers', fields, args.search,
-                                       expand=self.expands))
+        results = list(self.lookup(args.search, expand=self.expands))
         if not results:
             raise SystemExit("No results for: %s" % ' '.join(args.search))
         self.printer(results)
 
 
-class GroupAssign(base.Command):
+class GroupAssign(base.ECMCommand):
     """ Assign a router to a [new] group. """
 
     name = 'groupassign'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
-        parser.add_argument('new_group', metavar='NEW_GROUP_ID_OR_NAME')
-        parser.add_argument('-f', '--force', action='store_true')
+        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME',
+                          complete=self.make_completer('routers', 'name'))
+        self.add_argument('new_group', metavar='NEW_GROUP_ID_OR_NAME',
+                          complete=self.make_completer('groups', 'name'))
+        self.add_argument('-f', '--force', action='store_true')
 
     def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident,
@@ -185,7 +190,7 @@ class GroupAssign(base.Command):
                      {"group": group['resource_uri']})
 
 
-class GroupUnassign(base.Command):
+class GroupUnassign(base.ECMCommand):
     """ Remove a router from its group. """
 
     name = 'groupunassign'
@@ -198,7 +203,7 @@ class GroupUnassign(base.Command):
         self.api.put('routers', router['id'], {"group": None})
 
 
-class Edit(base.Command):
+class Edit(base.ECMCommand):
     """ Edit a group's attributes. """
 
     name = 'edit'
@@ -222,7 +227,7 @@ class Edit(base.Command):
         self.api.put('routers', router['id'], value)
 
 
-class Move(base.Command):
+class Move(base.ECMCommand):
     """ Move a router to different account """
 
     name = 'move'
@@ -238,7 +243,7 @@ class Move(base.Command):
                      {"account": account['resource_uri']})
 
 
-class Delete(base.Command):
+class Delete(base.ECMCommand):
     """ Delete (unregister) a router from ECM """
 
     name = 'delete'
@@ -257,7 +262,7 @@ class Delete(base.Command):
             self.api.delete('routers', router['id'])
 
 
-class Routers(base.Command):
+class Routers(base.ECMCommand):
     """ Manage ECM Routers. """
 
     name = 'routers'

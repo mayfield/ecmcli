@@ -14,7 +14,7 @@ def since(dt):
     return humanize.naturaltime(since)[:-4]
 
 
-class Alerts(base.Command):
+class Alerts(base.ECMCommand):
     """ Analyze and Report ECM Alerts """
 
     name = 'alerts'

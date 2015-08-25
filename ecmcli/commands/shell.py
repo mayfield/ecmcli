@@ -14,7 +14,7 @@ import tty
 from . import base
 
 
-class Shell(base.Command):
+class Shell(base.ECMCommand):
     """ Emulate an interactive shell to a remote router. """
 
     name = 'shell'
@@ -25,9 +25,10 @@ class Shell(base.Command):
     raw_out = sys.stdout.buffer.raw
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
-        parser.add_argument('-n', '--new', action='store_true',
-                            help='Start a new session')
+        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME',
+                          complete=self.routers_complete)
+        self.add_argument('-n', '--new', action='store_true',
+                          help='Start a new session')
 
     def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident)
@@ -37,6 +38,14 @@ class Shell(base.Command):
                     self.api.session_id
         with self.setup_tty():
             self.session(router, sessionid)
+
+    def routers_complete(self, startswith):
+        filters = {}
+        if startswith:
+            filters['name__startswith'] = startswith
+        routers = self.api.get_pager('routers', fields='name', **filters)
+        return [x['name'] for x in routers]
+
 
     @contextlib.contextmanager
     def setup_tty(self):

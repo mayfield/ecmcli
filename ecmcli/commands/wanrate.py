@@ -7,7 +7,7 @@ import humanize
 import time
 
 
-class WanRate(base.Command):
+class WanRate(base.ECMCommand):
     """ Show the current WAN bitrate of connected routers. """
 
     name = 'wanrate'

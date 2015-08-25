@@ -7,7 +7,7 @@ import time
 from . import base
 
 
-class FlashLEDS(base.Command):
+class FlashLEDS(base.ECMCommand):
     """ Flash the LEDs of online routers. """
 
     name = 'flashleds'

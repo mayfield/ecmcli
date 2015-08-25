@@ -2,6 +2,7 @@
 Manage ECM Accounts.
 """
 
+import sys
 from . import base
 
 
@@ -30,13 +31,24 @@ class Formatter(object):
                'subaccounts:%(subaccounts_count)d)' % account
 
 
-class Show(Formatter, base.Command):
+class Show(Formatter, base.ECMCommand):
     """ Show accounts """
 
     name = 'show'
 
+    tree_L = '└── '.encode().decode()
+    tree_T = '├── '
+    tree_vertspace = '│   '
+    try:
+        tree_L.encode(sys.stdout.encoding)
+    except UnicodeEncodeError:
+        tree_L = '\-- '
+        tree_T = '+-- '
+        tree_vertspace = '|   '
+
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME', nargs='?')
+        self.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME', nargs='?',
+                          complete=self.make_completer('accounts', 'name'))
         super().setup_args(parser)
 
     def run(self, args):
@@ -82,29 +94,28 @@ class Show(Formatter, base.Command):
             if prefix is not None:
                 line = [prefix]
                 if end == i:
-                    line.append('└── ')
-                elif i == 0:
-                    line.append('├── ')
+                    line.append(self.tree_L)
                 else:
-                    line.append('├── ')
+                    line.append(self.tree_T)
             else:
                 line = ['']
             print(''.join(line) + self.formatter(x))
             if x.get('children'):
                 if prefix is not None:
-                    line[-1] = '    ' if end == i else '│   '
+                    line[-1] = '    ' if end == i else self.tree_vertspace
                 self.account_tree(x['children'], prefix=''.join(line))
 
 
-class Create(base.Command):
+class Create(base.ECMCommand):
     """ Create account """
 
     name = 'create'
 
     def setup_args(self, parser):
-        parser.add_argument('-p', '--parent',
-                            metavar="PARENT_ACCOUNT_ID_OR_NAME")
-        parser.add_argument('name', metavar='NAME')
+        self.add_argument('-p', '--parent',
+                          metavar="PARENT_ACCOUNT_ID_OR_NAME",
+                          complete=self.make_completer('accounts', 'name'))
+        self.add_argument('name', metavar='NAME')
 
     def run(self, args):
         new_account = {
@@ -118,14 +129,15 @@ class Create(base.Command):
         self.api.post('accounts', new_account)
 
 
-class Delete(base.Command):
+class Delete(base.ECMCommand):
     """ Delete an account """
 
     name = 'delete'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME')
-        parser.add_argument('-f', '--force', action='store_true')
+        self.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME',
+                          complete=self.make_completer('accounts', 'name'))
+        self.add_argument('-f', '--force', action='store_true')
 
     def run(self, args):
         account = self.api.get_by_id_or_name('accounts', args.ident)
@@ -135,14 +147,16 @@ class Delete(base.Command):
         self.api.delete('accounts', account['id'])
 
 
-class Move(base.Command):
+class Move(base.ECMCommand):
     """ Move account to new parent account """
 
     name = 'move'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME')
-        parser.add_argument('new_parent', metavar='NEW_PARENT_ID_OR_NAME')
+        self.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME',
+                          complete=self.make_completer('accounts', 'name'))
+        self.add_argument('new_parent', metavar='NEW_PARENT_ID_OR_NAME',
+                          complete=self.make_completer('accounts', 'name'))
 
     def run(self, args):
         account = self.api.get_by_id_or_name('accounts', args.ident)
@@ -151,38 +165,42 @@ class Move(base.Command):
                      {"account": new_parent['resource_uri']})
 
 
-class Rename(base.Command):
+class Rename(base.ECMCommand):
     """ Rename an account """
 
     name = 'rename'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME')
-        parser.add_argument('new_name', metavar='NEW_NAME')
+        self.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME',
+                          complete=self.make_completer('accounts', 'name'))
+        self.add_argument('new_name', metavar='NEW_NAME')
 
     def run(self, args):
         account = self.api.get_by_id_or_name('accounts', args.ident)
         self.api.put('accounts', account['id'], {"name": args.new_name})
 
 
-class Search(Formatter, base.Command):
+class Search(Formatter, base.ECMCommand):
     """ Search for account(s) """
 
     name = 'search'
 
     def setup_args(self, parser):
-        parser.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
+        searcher = self.make_searcher('accounts', ['name'])
+        self.lookup = searcher.lookup
+        self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+',
+                          help=searcher.help, complete=searcher.completer)
         super().setup_args(parser)
 
     def run(self, args):
-        results = list(self.api.search('accounts', ['name'], args.search))
+        results = list(self.lookup(args.search))
         if not results:
             raise SystemExit("No results for: %s" % ' '.join(args.search))
         for x in results:
             print(self.formatter(x))
 
 
-class Accounts(base.Command):
+class Accounts(base.ECMCommand):
     """ Manage ECM Accounts. """
 
     name = 'accounts'

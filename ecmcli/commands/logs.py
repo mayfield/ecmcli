@@ -5,7 +5,7 @@ Download router logs from ECM.
 from . import base
 
 
-class Logs(base.Command):
+class Logs(base.ECMCommand):
     """ Show or clear router logs. """
 
     name = 'logs'

@@ -18,7 +18,7 @@ def walk_config(key, config):
     return offt
 
 
-class Config(base.Command):
+class Config(base.ECMCommand):
     """ Get and set configs for routers and groups. """
 
     name = 'config'

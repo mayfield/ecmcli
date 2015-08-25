@@ -5,7 +5,7 @@ Display and edit account and/or group settings.
 from . import base
 
 
-class Settings(base.Command):
+class Settings(base.ECMCommand):
     """ Display and edit account and group settings. """
 
     name = 'settings'

@@ -78,7 +78,7 @@ class Printer(object):
         print(fmt % info)
 
 
-class Show(Printer, base.Command):
+class Show(Printer, base.ECMCommand):
     """ Show group(s). """
 
     name = 'show'
@@ -97,7 +97,7 @@ class Show(Printer, base.Command):
             self.printer(self.bundle_group(x))
 
 
-class Create(base.Command):
+class Create(base.ECMCommand):
     """ Create a new group.
     A group mostly represents configuration for more than one device, but
     also manages settings such as alerts and log acquisition. """
@@ -147,7 +147,7 @@ class Create(base.Command):
         })
 
 
-class Edit(base.Command):
+class Edit(base.ECMCommand):
     """ Edit group attributes. """
 
     name = 'edit'
@@ -168,7 +168,7 @@ class Edit(base.Command):
         self.api.put('groups', group['id'], updates)
 
 
-class Delete(base.Command):
+class Delete(base.ECMCommand):
     """ Delete one or more groups. """
 
     name = 'delete'
@@ -187,7 +187,7 @@ class Delete(base.Command):
             self.api.delete('groups', group['id'])
 
 
-class Move(base.Command):
+class Move(base.ECMCommand):
     """ Move group to a different account. """
 
     name = 'move'
@@ -204,7 +204,7 @@ class Move(base.Command):
                      {"account": account['resource_uri']})
 
 
-class Search(Printer, base.Command):
+class Search(Printer, base.ECMCommand):
     """ Search for groups. """
 
     name = 'search'
@@ -224,7 +224,7 @@ class Search(Printer, base.Command):
             self.printer(self.bundle_group(x))
 
 
-class Groups(base.Command):
+class Groups(base.ECMCommand):
     """ Manage ECM Groups. """
 
     name = 'groups'

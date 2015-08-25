@@ -2,23 +2,14 @@
 Interactive shell for ECM.
 """
 
-import cmd
 import code
-import os.path
-import readline
-import shlex
-import shutil
-import sys
+import shellish
+import time
 from . import api
 
 
-class ShellQuit(Exception):
-    pass
+class ECMShell(shellish.Shell):
 
-
-class ECMShell(cmd.Cmd):
-
-    history_file = os.path.expanduser('~/.ecmcli_history')
     intro = '\n'.join([
         'Welcome to the ECM shell.',
         'Type "help" or "?" to list commands and "exit" to quit.'
@@ -34,60 +25,9 @@ class ECMShell(cmd.Cmd):
         return ': \033[7m%(user)s\033[0m@%(site)s /%(cwd)s ; \n:; ' % (info)
 
     def __init__(self, root_command):
+        super().__init__(root_command)
         self.api = root_command.api
-        self.root_command = root_command
         self.cwd = [self.api.ident['account']]
-        self.command_methods = ['do_%s' % x.name
-                                for x in root_command.subcommands]
-        try:
-            readline.read_history_file(self.history_file)
-        except FileNotFoundError:
-            pass
-        for x in root_command.subcommands:
-            x.api = self.api
-            setattr(self, 'do_%s' % x.name, self.wrap_command_invoke(x))
-            setattr(self, 'help_%s' % x.name, x.argparser.print_help)
-            setattr(self, 'complete_%s' % x.name, x.complete_wrap)
-        super().__init__()
-
-    def wrap_command_invoke(self, cmd):
-        def wrap(arg):
-            args = cmd.argparser.parse_args(shlex.split(arg))
-            cmd.invoke(args)
-        wrap.__doc__ = cmd.__doc__
-        wrap.__name__ = 'do_%s' % cmd.name
-        return wrap
-
-    def get_names(self):
-        return super().get_names() + self.command_methods
-
-    def emptyline(self):
-        """ Do not re-run the last command. """
-        pass
-
-    def columnize(self, items, displaywidth=None):
-        if displaywidth is None:
-            displaywidth, h = shutil.get_terminal_size()
-        return super().columnize(items, displaywidth=displaywidth)
-
-    def cmdloop(self):
-        intro = ()
-        while True:
-            try:
-                super().cmdloop(*intro)
-            except ShellQuit:
-                return
-            except KeyboardInterrupt:
-                print()
-            except api.AuthFailure as e:
-                raise e
-            except SystemExit as e:
-                if not str(e).isnumeric():
-                    print(e, file=sys.stderr)
-            finally:
-                readline.write_history_file(self.history_file)
-            if not intro:
-                intro = ('',)
 
     def do_ls(self, arg):
         if arg:
@@ -114,15 +54,18 @@ class ECMShell(cmd.Cmd):
         """ Run an interactive python interpretor. """
         code.interact(None, None, self.__dict__)
 
-    def do_exit(self, arg):
-        raise ShellQuit()
+    def do_debug_api(self, arg):
+        """ Start logging api activity to the screen. """
+        self.api.add_listener('start_request', self.on_request_start)
+        self.api.add_listener('finish_request', self.on_request_finish)
 
-    def default(self, line):
-        if line == 'EOF':
-            print('^D')
-            raise ShellQuit()
-        else:
-            return super().default(line)
+    def on_request_start(self, args=None, kwargs=None):
+        self.last_request_start = time.perf_counter()
+        print('START REQUEST', args, kwargs)
+
+    def on_request_finish(self, result=None):
+        time_taken = time.perf_counter() - self.last_request_start
+        print('FINISHED REQUEST (%g seconds):' % time_taken, result)
 
     def do_cd(self, arg):
         cwd = self.cwd[:]

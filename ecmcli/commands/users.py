@@ -2,6 +2,7 @@
 List/Edit/Manage ECM Users.
 """
 
+import datetime
 import getpass
 from . import base
 
@@ -40,14 +41,16 @@ class Common(object):
 
     def verbose_printer(self, user):
         account = user['profile']['account']
-        print('Username:   ', user['username'])
-        print('Full Name:  ', user['name'])
-        print('Account:    ', account['name'], '(%s)' % account['id'])
-        print('Role(s):    ', user['roles'])
-        print('ID:         ', user['id'])
-        print('Email:      ', user['email'])
-        print('Joined:     ', user['date_joined'])
-        print('Last Login: ', user['last_login'])
+        session = datetime.timedelta(seconds=user['profile']['session_length'])
+        print('Username:       ', user['username'])
+        print('Full Name:      ', user['name'])
+        print('Account:        ', account['name'], '(%s)' % account['id'])
+        print('Role(s):        ', user['roles'])
+        print('ID:             ', user['id'])
+        print('Email:          ', user['email'])
+        print('Joined:         ', user['date_joined'])
+        print('Last Login:     ', user['last_login'])
+        print('Session Length: ', session)
         print()
 
     def terse_printer(self, user):
@@ -70,14 +73,15 @@ class Common(object):
         print(fmt % user)
 
 
-class Show(Common, base.Command):
+class Show(Common, base.ECMCommand):
     """ Show user info. """
 
     name = 'show'
 
     def setup_args(self, parser):
-        parser.add_argument('username', metavar='USERNAME', nargs='?')
-        parser.add_argument('-v', '--verbose', action='store_true')
+        self.add_argument('username', metavar='USERNAME', nargs='?',
+                          complete=self.make_completer('users', 'username'))
+        self.add_argument('-v', '--verbose', action='store_true')
 
     def run(self, args, users=None):
         if users is None:
@@ -89,17 +93,17 @@ class Show(Common, base.Command):
             self.printer(self.bundle_user(x))
 
 
-class Create(Common, base.Command):
+class Create(Common, base.ECMCommand):
     """ Create a new user. """
 
     name = 'create'
     role_choices = ['admin', 'full', 'readonly']
 
     def setup_args(self, parser):
-        parser.add_argument('--email')
-        parser.add_argument('--password')
-        parser.add_argument('--fullname')
-        parser.add_argument('--role', choices=self.role_choices)
+        self.add_argument('--email')
+        self.add_argument('--password')
+        self.add_argument('--fullname')
+        self.add_argument('--role', choices=self.role_choices)
 
     def run(self, args):
         username = args.email or input('Email: ')
@@ -137,15 +141,17 @@ class Create(Common, base.Command):
         })
 
 
-class Edit(Common, base.Command):
+class Edit(Common, base.ECMCommand):
     """ Edit user attributes. """
 
     name = 'edit'
 
     def setup_args(self, parser):
-        parser.add_argument('username', metavar='USERNAME')
-        parser.add_argument('--email')
-        parser.add_argument('--fullname')
+        self.add_argument('username', metavar='USERNAME',
+                          complete=self.make_completer('users', 'username'))
+        self.add_argument('--email')
+        self.add_argument('--fullname')
+        self.add_argument('--session_length', type=int)
 
     def run(self, args):
         user = self.get_user(args.username)
@@ -156,17 +162,22 @@ class Edit(Common, base.Command):
             updates['last_name'] = last
         if args.email:
             updates['email'] = args.email
-        self.api.put('users', user['id'], updates)
+        if updates:
+            self.api.put('users', user['id'], updates)
+        if args.session_length:
+            self.api.put('profiles', user['profile']['id'],
+                         {"session_length": args.session_length})
 
 
-class Delete(Common, base.Command):
+class Delete(Common, base.ECMCommand):
     """ Delete a user. """
 
     name = 'delete'
 
     def setup_args(self, parser):
-        parser.add_argument('username', metavar='USERNAME', nargs='+')
-        parser.add_argument('-f', '--force', action="store_true")
+        self.add_argument('username', metavar='USERNAME', nargs='+',
+                          complete=self.make_completer('users', 'username'))
+        self.add_argument('-f', '--force', action="store_true")
 
     def run(self, args):
         for username in args.username:
@@ -177,14 +188,15 @@ class Delete(Common, base.Command):
             self.api.delete('users', user['id'])
 
 
-class Move(Common, base.Command):
+class Move(Common, base.ECMCommand):
     """ Move a user to a different account. """
 
     name = 'move'
 
     def setup_args(self, parser):
-        parser.add_argument('username', metavar='USERNAME')
-        parser.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
+        self.add_argument('username', metavar='USERNAME',
+                          complete=self.make_completer('users', 'username'))
+        self.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
 
     def run(self, args):
         user = self.get_user(args.username)
@@ -193,7 +205,7 @@ class Move(Common, base.Command):
                      {"account": account['resource_uri']})
 
 
-class Passwd(base.Command):
+class Passwd(base.ECMCommand):
     """ Change your password. """
 
     name = 'passwd'
@@ -210,14 +222,14 @@ class Passwd(base.Command):
         self.api.put('users', user['id'], update)
 
 
-class Search(Common, base.Command):
+class Search(Common, base.ECMCommand):
     """ Search for users. """
 
     name = 'search'
 
     def setup_args(self, parser):
-        parser.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
-        parser.add_argument('-v', '--verbose', action='store_true')
+        self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
+        self.add_argument('-v', '--verbose', action='store_true')
 
     def run(self, args):
         fields = ['username', 'first_name', 'last_name', 'email',
@@ -229,7 +241,58 @@ class Search(Common, base.Command):
         self.show_cmd(args, users=results)
 
 
-class Users(base.Command):
+class Sub(base.ECMCommand):
+    """ Sub """
+    name = 'sub'
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_subcommand(Leaf1, default=True)
+        self.add_subcommand(Leaf2)
+        self.add_subcommand(Leaf3)
+
+class Leaf1(base.ECMCommand):
+    """ Leaf 1 """
+    name = 'leaf1'
+    def setup_args(self, parser):
+        self.add_argument('pos1', complete=self.complete)
+        self.add_argument('pos22', complete=self.complete)
+        self.add_argument('--foo_req_one_or_more', nargs='+', complete=self.complete)
+        self.add_argument('--foo_one', complete=self.complete)
+        self.add_argument('--foo_bool', action='store_true')
+        self.add_argument('--foo_any', nargs="*", complete=self.complete)
+        self.add_argument('--foo_choices', choices=['choice1', 'choice2'])
+
+    def complete(self, prefix):
+        return ['aaa', 'bbb', 'B b B b', 'c1111', 'c2222', 'd']
+
+    def run(self, args):
+        print("LEAF1", args)
+
+class Leaf2(base.ECMCommand):
+    """ Leaf 2 """
+    name = 'leaf2'
+    def setup_args(self, parser):
+        self.add_argument('--bar_req_one_or_more', nargs='+')
+        self.add_argument('--bar_one')
+        self.add_argument('--bar_3', nargs=3)
+        self.add_argument('--bar_3_ch', nargs=3, choices='ABCD')
+        self.add_argument('--bar_bool', action='store_true')
+        self.add_argument('--bar_any', nargs="*", help='Any bar will do')
+    def run(self, args):
+        print("LEAF2", args)
+
+class Leaf3(base.ECMCommand):
+    """ Leaf 3 """
+    name = 'leaf3'
+    def setup_args(self, parser):
+        self.add_argument('pos1', choices=['oneone', 'ONEONE'])
+        self.add_argument('pos2', choices=['twotwo', 'TWOTWO'])
+        self.add_argument('--pos3', choices=['threethree', 'THREETHREE'])
+    def run(self, args):
+        print("LEAF3", args)
+
+
+class Users(base.ECMCommand):
     """ Manage ECM Users. """
 
     name = 'users'
@@ -243,5 +306,6 @@ class Users(base.Command):
         self.add_subcommand(Move)
         self.add_subcommand(Passwd)
         self.add_subcommand(Search)
+        self.add_subcommand(Sub)
 
 command_classes = [Users]
