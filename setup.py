@@ -16,7 +16,7 @@ def long_desc():
 
 setup(
     name='ecmcli',
-    version='1.99.0',
+    version='1.99.1',
     description='Command Line Interface for Cradlepoint ECM',
     author='Justin Mayfield',
     author_email='tooker@gmail.com',
@@ -26,7 +26,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'syndicate',
-        'shellish',
+        'shellish>=0.2.0',
         'humanize'
     ],
     entry_points = {

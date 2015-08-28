@@ -4,6 +4,7 @@ Foundation components for commands.
 
 import collections
 import shellish
+from ecmcli import shell
 
 
 def confirm(msg, exit=True):
@@ -20,6 +21,7 @@ class ECMCommand(shellish.Command):
     """ Extensions for dealing with ECM's APIs. """
 
     Searcher = collections.namedtuple('Searcher', 'lookup, completer, help')
+    Shell = shell.ECMShell
 
     def api_complete(self, resource, field, startswith):
         options = {}
@@ -103,11 +105,9 @@ class ECMCommand(shellish.Command):
                 terms = set('%s:<MATCH_CRITERIA>' % x for x in fields)
                 return terms | {'<SEARCH_CRITERIA>'}
             else:
-                options = {}
                 expands = [x.rsplit('.', 1)[0] for x in fields.values()
                            if '.' in x]
-                if expands:
-                    options['expand'] = ','.join(expands)
+                options = {"expand": ','.join(expands)} if expands else {}
 
                 results = self.api_search(resource, fields, [startswith],
                                           match='startswith', **options)

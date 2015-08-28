@@ -9,7 +9,7 @@ from . import base
 class Formatter(object):
 
     def setup_args(self, parser):
-        parser.add_argument('-v', '--verbose', action='store_true')
+        self.add_argument('-v', '--verbose', action='store_true')
         super().setup_args(parser)
 
     def prerun(self, args):

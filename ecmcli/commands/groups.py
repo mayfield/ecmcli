@@ -18,7 +18,7 @@ class Printer(object):
     ])
 
     def setup_args(self, parser):
-        parser.add_argument('-v', '--verbose', action='store_true')
+        self.add_argument('-v', '--verbose', action='store_true')
         super().setup_args(parser)
 
     def prerun(self, args):
@@ -84,7 +84,8 @@ class Show(Printer, base.ECMCommand):
     name = 'show'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='?')
+        self.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='?',
+                          complete=self.make_completer('groups', 'name'))
         super().setup_args(parser)
 
     def run(self, args):
@@ -105,9 +106,9 @@ class Create(base.ECMCommand):
     name = 'create'
 
     def setup_args(self, parser):
-        parser.add_argument('--name')
-        parser.add_argument('--product')
-        parser.add_argument('--firmware')
+        self.add_argument('--name')
+        self.add_argument('--product')
+        self.add_argument('--firmware')
 
     def run(self, args):
         name = args.name or input('Name: ')
@@ -115,7 +116,8 @@ class Create(base.ECMCommand):
             raise SystemExit("Name required")
 
         product = args.product or input('Product: ')
-        products = dict((x['name'], x) for x in self.api.get_pager('products'))
+        products = dict((x['name'], x)
+                        for x in self.api.get_pager('products'))
         if product not in products:
             if not product:
                 print("Product required")
@@ -129,7 +131,7 @@ class Create(base.ECMCommand):
         fw = args.firmware or input('Firmware: ')
         firmwares = dict((x['version'], x)
                          for x in self.api.get_pager('firmwares',
-                                                product=products[product]['id']))
+                         product=products[product]['id']))
         if fw not in firmwares:
             if not fw:
                 print("Firmware required")
@@ -153,9 +155,10 @@ class Edit(base.ECMCommand):
     name = 'edit'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='GROUP_ID_OR_NAME')
-        parser.add_argument('--name')
-        parser.add_argument('--firmware')
+        self.add_argument('ident', metavar='GROUP_ID_OR_NAME',
+                          complete=self.make_completer('groups', 'name'))
+        self.add_argument('--name')
+        self.add_argument('--firmware', help='Eg. 5.4.1')
 
     def run(self, args):
         group = self.api.get_by_id_or_name('groups', args.ident)
@@ -174,8 +177,9 @@ class Delete(base.ECMCommand):
     name = 'delete'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='+')
-        parser.add_argument('-f', '--force', action="store_true")
+        self.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='+',
+                          complete=self.make_completer('groups', 'name'))
+        self.add_argument('-f', '--force', action="store_true")
 
     def run(self, args):
         for ident in args.ident:
@@ -193,9 +197,10 @@ class Move(base.ECMCommand):
     name = 'move'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='GROUP_ID_OR_NAME')
-        parser.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
-        parser.add_argument('-f', '--force', action="store_true")
+        self.add_argument('ident', metavar='GROUP_ID_OR_NAME',
+                          complete=self.make_completer('groups', 'name'))
+        self.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
+        self.add_argument('-f', '--force', action="store_true")
 
     def run(self, args):
         group = self.api.get_by_id_or_name('groups', args.ident)
@@ -208,16 +213,18 @@ class Search(Printer, base.ECMCommand):
     """ Search for groups. """
 
     name = 'search'
+    fields = ['name', ('firmware', 'target_firmware.version'),
+              ('product', 'product.name'), ('account', 'account.name')]
 
     def setup_args(self, parser):
-        parser.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
+        searcher = self.make_searcher('groups', self.fields)
+        self.lookup = searcher.lookup
+        self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+',
+                          help=searcher.help, complete=searcher.completer)
         super().setup_args(parser)
 
     def run(self, args):
-        fields = ['name', ('firmware', 'target_firmware.version'),
-                  ('product', 'product.name'), ('account', 'account.name')]
-        results = list(self.api.search('groups', fields, args.search,
-                                       expand=self.expands))
+        results = list(self.lookup(args.search, expand=self.expands))
         if not results:
             raise SystemExit("No Results For: %s" % ' '.join(args.search))
         for x in results:

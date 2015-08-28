@@ -20,8 +20,8 @@ class Alerts(base.ECMCommand):
     name = 'alerts'
 
     def setup_args(self, parser):
-        parser.add_argument('-e', '--expand', action='store_true',
-                            help="Expand each alert")
+        self.add_argument('-e', '--expand', action='store_true',
+                          help="Expand each alert")
 
     def run(self, args):
         by_type = collections.OrderedDict()

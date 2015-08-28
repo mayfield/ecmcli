@@ -5,7 +5,7 @@ Bootstrap the shell and commands and then run either one.
 import importlib
 import pkg_resources
 import sys
-from . import api, shell
+from . import api
 from .commands import base
 
 command_modules = [
@@ -52,7 +52,7 @@ class ECMRoot(base.ECMCommand):
         super().prerun(args)
 
     def run(self, args):
-        shell.ECMShell(self).cmdloop()
+        self.shell()
 
 
 def main():
@@ -65,6 +65,6 @@ def main():
     root.api.connect(args.api_site, username=args.api_username,
                      password=args.api_password)
     try:
-        root.invoke(args)
+        root(args)
     except KeyboardInterrupt:
         sys.exit(1)

@@ -196,7 +196,8 @@ class GroupUnassign(base.ECMCommand):
     name = 'groupunassign'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
+        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME',
+                          complete=self.make_completer('routers', 'name'))
 
     def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident)
@@ -209,12 +210,12 @@ class Edit(base.ECMCommand):
     name = 'edit'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
-        parser.add_argument('--name')
-        parser.add_argument('--desc')
-        parser.add_argument('--asset_id')
-        parser.add_argument('--custom1')
-        parser.add_argument('--custom2')
+        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
+        self.add_argument('--name')
+        self.add_argument('--desc')
+        self.add_argument('--asset_id')
+        self.add_argument('--custom1')
+        self.add_argument('--custom2')
 
     def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident)
@@ -233,8 +234,10 @@ class Move(base.ECMCommand):
     name = 'move'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
-        parser.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
+        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME',
+                          complete=self.make_completer('routers', 'name'))
+        self.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME',
+                          complete=self.make_completer('accounts', 'name'))
 
     def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident)
@@ -249,8 +252,8 @@ class Delete(base.ECMCommand):
     name = 'delete'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME', nargs='+')
-        parser.add_argument('-f', '--force', action='store_true')
+        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME', nargs='+')
+        self.add_argument('-f', '--force', action='store_true')
 
     def run(self, args):
         for id_or_name in args.ident:
