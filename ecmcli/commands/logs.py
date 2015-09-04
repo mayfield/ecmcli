@@ -39,7 +39,7 @@ class Logs(base.ECMCommand):
             print("Logs for: %s (%s)" % (rinfo['name'], rinfo['id']))
             for x in self.api.get_pager('logs', rinfo['id'], **filters):
                 x['mac'] = rinfo['mac']
-                print('%(timestamp)s [%(mac)s] [%(levelname)8s] ' \
+                print('%(timestamp)s [%(mac)s] [%(levelname)8s] '
                       '[%(source)18s] %(message)s' % x)
 
 command_classes = [Logs]

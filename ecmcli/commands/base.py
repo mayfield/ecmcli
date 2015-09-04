@@ -15,8 +15,6 @@ def confirm(msg, exit=True):
     return True
 
 
-
-
 class ECMCommand(shellish.Command):
     """ Extensions for dealing with ECM's APIs. """
 

@@ -33,7 +33,7 @@ class Printer(object):
         if not isinstance(group['settings_bindings'], str):
             group['settings'] = dict((x['setting']['name'] + ':', x['value'])
                                      for x in group['settings_bindings']
-                                     if not isinstance(x, str) and \
+                                     if not isinstance(x, str) and
                                         x['value'] is not None)
         else:
             group['settings'] = {}
@@ -41,41 +41,40 @@ class Printer(object):
         group['online'] = stats['online_count']
         group['offline'] = stats['offline_count']
         group['total'] = stats['device_count']
+        group['account_name'] = group['account']['name']
         return group
 
-    def verbose_printer(self, group):
-        print('ID:           ', group['id'])
-        print('Name:         ', group['name'])
-        print('Online:       ', group['online'])
-        print('Total:        ', group['total'])
-        print('Target:       ', group['target'])
-        print('Account:      ', group['account']['name'])
-        print('Suspended:    ', group['statistics']['suspended_count'])
-        print('Synchronized: ', group['statistics']['synched_count'])
-        if group['settings']:
-            print('Settings...')
-            for x in sorted(group['settings'].items()):
-                print('  %-30s %s' % x)
-        print()
+    def verbose_printer(self, groups):
+        for x in groups:
+            group = self.bundle_group(x)
+            print('ID:           ', group['id'])
+            print('Name:         ', group['name'])
+            print('Online:       ', group['online'])
+            print('Total:        ', group['total'])
+            print('Target:       ', group['target'])
+            print('Account:      ', group['account']['name'])
+            print('Suspended:    ', group['statistics']['suspended_count'])
+            print('Synchronized: ', group['statistics']['synched_count'])
+            if group['settings']:
+                print('Settings...')
+                for x in sorted(group['settings'].items()):
+                    print('  %-30s %s' % x)
+            print()
 
-    def terse_printer(self, group):
-        fmt = '%(name)-30s %(account)-16s %(target)-16s %(online)-5s'
-        if not self.printed_header:
-            self.printed_header = True
-            info = {
-                "name": 'NAME (ID)',
-                "account": 'ACCOUNT',
-                "target": 'TARGET',
-                "online": 'ONLINE'
-            }
-            print(fmt % info)
-        info = {
-            "name": '%s (%s)' % (group['name'], group['id']),
-            "account": group['account']['name'],
-            "target": group['target'],
-            "online": '%s/%s' % (group['online'], group['total'])
-        }
-        print(fmt % info)
+    def terse_printer(self, groups):
+        fields = (
+            ("name", 'Name'),
+            ("id", 'ID'),
+            ("account_name", 'Account'),
+            ("target", 'Target'),
+            ("online", 'Online'),
+            ("offline", 'Offline'),
+            ("total", 'Total'),
+        )
+        rows = [[x[1] for x in fields]]
+        rows.extend([x[f[0]] for f in fields]
+                    for x in map(self.bundle_group, groups))
+        self.tabulate(rows)
 
 
 class Show(Printer, base.ECMCommand):
@@ -94,8 +93,7 @@ class Show(Printer, base.ECMCommand):
                                                  expand=self.expands)]
         else:
             groups = self.api.get_pager('groups', expand=self.expands)
-        for x in groups:
-            self.printer(self.bundle_group(x))
+        self.printer(groups)
 
 
 class Create(base.ECMCommand):
@@ -227,8 +225,7 @@ class Search(Printer, base.ECMCommand):
         results = list(self.lookup(args.search, expand=self.expands))
         if not results:
             raise SystemExit("No Results For: %s" % ' '.join(args.search))
-        for x in results:
-            self.printer(self.bundle_group(x))
+        self.printer(results)
 
 
 class Groups(base.ECMCommand):

@@ -19,8 +19,9 @@ class Shell(base.ECMCommand):
 
     name = 'shell'
     poll_max_retry = 300  # Max secs for polling when no activity is detected.
-    key_idle_timeout = 0.150  # How long we wait for additional keystrokes
-                              # after one or more keystrokes have been detected.
+    # How long we wait for additional keystrokes after one or more keystrokes
+    # have been detected.
+    key_idle_timeout = 0.150
     raw_in = sys.stdin.buffer.raw
     raw_out = sys.stdout.buffer.raw
 
@@ -45,7 +46,6 @@ class Shell(base.ECMCommand):
             filters['name__startswith'] = startswith
         routers = self.api.get_pager('routers', fields='name', **filters)
         return [x['name'] for x in routers]
-
 
     @contextlib.contextmanager
     def setup_tty(self):

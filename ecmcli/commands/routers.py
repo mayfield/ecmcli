@@ -68,11 +68,12 @@ class Printer(object):
                 first = False
             else:
                 print()
-            print('*' * 10, '%s (%s) - %s - %s' % (x['name'], x['id'], x['mac'],
-                  x['ip_address']), '*' * 10)
+            print('*' * 10, '%s (%s) - %s - %s' % (x['name'], x['id'],
+                  x['mac'], x['ip_address']), '*' * 10)
             x['since'] = self.since(x['state_ts'])
             x['joined'] = self.since(x['create_ts']) + ' ago'
-            x['account_info'] = '%s (%s)' % (x['account']['name'], x['account']['id'])
+            x['account_info'] = '%s (%s)' % (x['account']['name'],
+                                             x['account']['id'])
             x['group_name'] = self.group_name(x['group'])
             x['product_info'] = x['product']['name']
             fw = x['actual_firmware']
@@ -83,8 +84,8 @@ class Printer(object):
             acc = lambda x: x['settings']['entitlement'] \
                              ['sf_entitlements'][0]['name']
             x['entitlements'] = ', '.join(map(acc, ents)) if ents else ''
-            x['dashboard_url'] = 'https://cradlepointecm.com/ecm.html#devices/' \
-                                 'dashboard?id=%s' % x['id']
+            x['dashboard_url'] = 'https://cradlepointecm.com/ecm.html' \
+                                 '#devices/dashboard?id=%s' % x['id']
             for key, label in sorted(fields.items(), key=lambda x: x[1]):
                 print(fmt % (label, x[key]))
 
@@ -100,20 +101,23 @@ class Printer(object):
             return group['name']
 
     def terse_printer(self, routers):
-        fmt = '%(name_info)-24s %(account_name)-18s %(group_name)-22s ' \
-              '%(ip_address)-16s %(state)s'
-        print(fmt % {
-            "name_info": "NAME (ID)",
-            "account_name": "ACCOUNT",
-            "group_name": "GROUP",
-            "ip_address": "IP ADDRESS",
-            "state": "CONN"
-        })
-        for x in routers:
-            x['name_info'] = '%s (%s)' % (x['name'], x['id'])
-            x['account_name'] = x['account']['name']
-            x['group_name'] = self.group_name(x['group'])
-            print(fmt % x)
+        fields = (
+            ("name", "Name"),
+            ("id", "ID"),
+            ("account_name", "Account"),
+            ("group_name", "Group"),
+            ("ip_address", "IP Address"),
+            ("state", "Conn")
+        )
+        rows = [[x[1] for x in fields]]
+        rows.extend([x[f[0]] for f in fields]
+                    for x in map(self.bundle_router, routers))
+        self.tabulate(rows)
+
+    def bundle_router(self, router):
+        router['account_name'] = router['account']['name']
+        router['group_name'] = self.group_name(router['group'])
+        return router
 
     def prerun(self, args):
         if args.verbose:

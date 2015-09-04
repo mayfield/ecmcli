@@ -44,9 +44,13 @@ class Alerts(base.ECMCommand):
                 ent['records'].append(x),
                 ent['oldest'] = x['created_ts']
         print()
-        for key, data in by_type.items():
-            print('%25s (%5d) newest: %-20s oldest: %-20s' % (key, len(data['records']),
-                  since(data['newest']),
-                  since(data['oldest'])))
+        data = [('Alert Type', 'Count', 'Most Recent', 'Oldest')]
+        data.extend((
+            name,
+            len(x['records']),
+            since(x['newest']),
+            since(x['oldest'])
+        ) for name, x in by_type.items())
+        self.tabulate(data)
 
 command_classes = [Alerts]

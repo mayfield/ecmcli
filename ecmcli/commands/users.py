@@ -16,7 +16,6 @@ class Common(object):
 
     def prerun(self, args):
         self.verbose = getattr(args, 'verbose', False)
-        self.printed_header = False
         self.printer = self.verbose_printer if self.verbose else \
                        self.terse_printer
         super().prerun(args)
@@ -33,44 +32,43 @@ class Common(object):
         return name[0], last_name
 
     def bundle_user(self, user):
+        account = user['profile']['account']
         user['name'] = '%(first_name)s %(last_name)s' % user
         user['roles'] = ', '.join(x['role']['name']
                                   for x in user['authorizations']
                                   if x['role']['id'] != '4')
+        user['account_desc'] = '%s (%s)' % (account['name'], account['id'])
         return user
 
-    def verbose_printer(self, user):
-        account = user['profile']['account']
-        session = datetime.timedelta(seconds=user['profile']['session_length'])
-        print('Username:       ', user['username'])
-        print('Full Name:      ', user['name'])
-        print('Account:        ', account['name'], '(%s)' % account['id'])
-        print('Role(s):        ', user['roles'])
-        print('ID:             ', user['id'])
-        print('Email:          ', user['email'])
-        print('Joined:         ', user['date_joined'])
-        print('Last Login:     ', user['last_login'])
-        print('Session Length: ', session)
-        print()
+    def verbose_printer(self, users):
+        for x in users:
+            user = self.bundle_user(x)
+            slen = user['profile']['session_length']
+            session = datetime.timedelta(seconds=slen)
+            print('Username:       ', user['username'])
+            print('Full Name:      ', user['name'])
+            print('Account:        ', user['account_desc'])
+            print('Role(s):        ', user['roles'])
+            print('ID:             ', user['id'])
+            print('Email:          ', user['email'])
+            print('Joined:         ', user['date_joined'])
+            print('Last Login:     ', user['last_login'])
+            print('Session Length: ', session)
+            print()
 
-    def terse_printer(self, user):
-        fmt = '%(username)-28s %(name)-23s %(account_desc)-21s %(roles)-17s ' \
-              '%(id)-6s %(email)s'
-        if not self.printed_header:
-            self.printed_header = True
-            header = {
-                "username": 'USERNAME',
-                "name": 'FULL NAME',
-                "account_desc": 'ACCOUNT',
-                "roles": 'ROLE(S)',
-                "id": 'ID',
-                "email": 'EMAIL'
-            }
-            print(fmt % header)
-        user = user.copy()
-        account = user['profile']['account']
-        user['account_desc'] = '%s (%s)' % (account['name'], account['id'])
-        print(fmt % user)
+    def terse_printer(self, users):
+        fields = [
+            ('username', 'Username'),
+            ('name', 'Full Name'),
+            ('account_desc', 'Account'),
+            ('roles', 'Role(s)'),
+            ('id', 'ID'),
+            ('email', 'EMail')
+        ]
+        rows = [[x[1] for x in fields]]
+        rows.extend([x[f[0]] for f in fields]
+                    for x in map(self.bundle_user, users))
+        self.tabulate(rows)
 
 
 class Show(Common, base.ECMCommand):
@@ -89,8 +87,7 @@ class Show(Common, base.ECMCommand):
                 users = [self.get_user(args.username)]
             else:
                 users = self.api.get_pager('users', expand=self.expands)
-        for x in users:
-            self.printer(self.bundle_user(x))
+        self.printer(users)
 
 
 class Create(Common, base.ECMCommand):
@@ -226,70 +223,21 @@ class Search(Common, base.ECMCommand):
     """ Search for users. """
 
     name = 'search'
+    fields = ['username', 'first_name', 'last_name', 'email',
+              ('account', 'profile.account.name')]
 
     def setup_args(self, parser):
-        self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+')
+        searcher = self.make_searcher('users', self.fields)
+        self.lookup = searcher.lookup
+        self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+',
+                          help=searcher.help, complete=searcher.completer)
         self.add_argument('-v', '--verbose', action='store_true')
 
     def run(self, args):
-        fields = ['username', 'first_name', 'last_name', 'email',
-                  ('account', 'profile.account.name')]
-        results = list(self.api.search('users', fields, args.search,
-                                       expand=self.expands))
+        results = list(self.lookup(args.search, expand=self.expands))
         if not results:
             raise SystemExit("No results for: %s" % ' '.join(args.search))
-        self.show_cmd(args, users=results)
-
-
-class Sub(base.ECMCommand):
-    """ Sub """
-    name = 'sub'
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.add_subcommand(Leaf1, default=True)
-        self.add_subcommand(Leaf2)
-        self.add_subcommand(Leaf3)
-
-class Leaf1(base.ECMCommand):
-    """ Leaf 1 """
-    name = 'leaf1'
-    def setup_args(self, parser):
-        self.add_argument('pos1', complete=self.complete)
-        self.add_argument('pos22', complete=self.complete)
-        self.add_argument('--foo_req_one_or_more', nargs='+', complete=self.complete)
-        self.add_argument('--foo_one', complete=self.complete)
-        self.add_argument('--foo_bool', action='store_true')
-        self.add_argument('--foo_any', nargs="*", complete=self.complete)
-        self.add_argument('--foo_choices', choices=['choice1', 'choice2'])
-
-    def complete(self, prefix):
-        return ['aaa', 'bbb', 'B b B b', 'c1111', 'c2222', 'd']
-
-    def run(self, args):
-        print("LEAF1", args)
-
-class Leaf2(base.ECMCommand):
-    """ Leaf 2 """
-    name = 'leaf2'
-    def setup_args(self, parser):
-        self.add_argument('--bar_req_one_or_more', nargs='+')
-        self.add_argument('--bar_one')
-        self.add_argument('--bar_3', nargs=3)
-        self.add_argument('--bar_3_ch', nargs=3, choices='ABCD')
-        self.add_argument('--bar_bool', action='store_true')
-        self.add_argument('--bar_any', nargs="*", help='Any bar will do')
-    def run(self, args):
-        print("LEAF2", args)
-
-class Leaf3(base.ECMCommand):
-    """ Leaf 3 """
-    name = 'leaf3'
-    def setup_args(self, parser):
-        self.add_argument('pos1', choices=['oneone', 'ONEONE'])
-        self.add_argument('pos2', choices=['twotwo', 'TWOTWO'])
-        self.add_argument('--pos3', choices=['threethree', 'THREETHREE'])
-    def run(self, args):
-        print("LEAF3", args)
+        self.printer(results)
 
 
 class Users(base.ECMCommand):
@@ -306,6 +254,5 @@ class Users(base.ECMCommand):
         self.add_subcommand(Move)
         self.add_subcommand(Passwd)
         self.add_subcommand(Search)
-        self.add_subcommand(Sub)
 
 command_classes = [Users]

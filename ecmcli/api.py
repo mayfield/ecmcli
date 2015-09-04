@@ -307,7 +307,7 @@ class ECMService(Eventer, syndicate.Service):
         tos_parser = TOSParser()
         for tos in self.get_pager('system_message', type='tos'):
             tos_parser.feed(tos['message'])
-            input("You must read and accept the terms of service to " \
+            input("You must read and accept the terms of service to "
                   "continue: <press enter>")
             tos_parser.pager()
             print()
@@ -318,32 +318,6 @@ class ECMService(Eventer, syndicate.Service):
                 "message": tos['resource_uri']
             })
             return True
-
-    def search(self, resource, field_desc, criteria, match='icontains',
-               **options):
-        or_terms = []
-        fields = {}
-        for x in field_desc:
-            if isinstance(x, tuple):
-                fields[x[0]] = x[1]
-            else:
-                fields[x] = x
-        for term in criteria:
-            if ':' in term:
-                field, value = term.split(':', 1)
-                if field not in fields:
-                    print("Invalid Search Field:", field)
-                    print("Valid Specifiers:", ', '.join(fields))
-                    raise SystemExit()
-                options['%s__%s' % (fields[field], match)] = value
-                fields.pop(field)
-            else:
-                query = [('%s__%s' % (x, match), term)
-                         for x in fields.values()]
-                or_terms.extend('='.join(x) for x in query)
-        if or_terms:
-            options['_or'] = '|'.join(or_terms)
-        return self.get_pager(resource, **options)
 
     def get_by(self, selectors, resource, criteria, required=True, **options):
         for field in selectors:
