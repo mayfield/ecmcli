@@ -269,6 +269,47 @@ class Delete(base.ECMCommand):
             self.api.delete('routers', router['id'])
 
 
+class Clients(base.ECMCommand):
+    """ Show the currently connected clients on a router. The router must be
+    connected to ECM for this to work. """
+
+    name = 'clients'
+
+    def setup_args(self, parser):
+        self.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='*',
+                          complete=self.make_completer('routers', 'name'))
+
+    def run(self, args):
+        if args.idents:
+            routers = [self.api.get_by_id_or_name('routers', x)
+                       for x in args.idents]
+        else:
+            routers = self.api.get_pager('routers')
+        ids = dict((x['id'], x['name']) for x in routers
+                   if x['state'] == 'online')
+        if not ids:
+            raise SystemExit("No online routers found")
+        t = self.tabulate([['Router', 'IP Address', 'Hostname', 'MAC']])
+        # Generate a dns db first.
+        dns = {}
+        for leases in self.api.get_pager('remote', '/status/dhcpd/leases',
+                                         id__in=','.join(ids)):
+            if not leases['success']:
+                continue
+            dns.update(dict((x['mac'], x) for x in leases['data']))
+        for clients in self.api.get_pager('remote', '/status/lan/clients',
+                                          id__in=','.join(ids)):
+            if not clients['success']:
+                print('XXX Skipping: %s' % clients)
+                continue
+            router = ids[str(clients['id'])]
+            data = []
+            for x in clients['data']:
+                hostname = dns.get(x['mac'], {}).get('hostname')
+                data.append([router, x['ip_address'], hostname, x['mac']])
+            t.write(data)
+
+
 class Routers(base.ECMCommand):
     """ Manage ECM Routers. """
 
@@ -282,5 +323,6 @@ class Routers(base.ECMCommand):
         self.add_subcommand(GroupAssign)
         self.add_subcommand(GroupUnassign)
         self.add_subcommand(Delete)
+        self.add_subcommand(Clients)
 
 command_classes = [Routers]
