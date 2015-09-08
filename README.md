@@ -6,6 +6,13 @@ interact with Cradlepoint's ECM service.  Commands are subtasks of the
 ECM utility.  The full list of subtasks are visible by running 'ecm --help'.
 
 
+Status
+--------
+
+[![Change Log](https://img.shields.io/badge/change-log-blue.svg)](https://github.com/mayfield/ecmcli/blob/master/CHANGELOG.md)
+[![Build Status](https://semaphoreci.com/api/v1/projects/a1b17c52-185a-4cc6-ad28-d7f5883bca42/533645/shields_badge.svg)](https://semaphoreci.com/mayfield/ecmcli)
+
+
 Walkthrough Video
 --------
 [![Walkthrough Video](http://share.gifyoutube.com/y7nLaZ.gif)](http://www.youtube.com/watch?v=fv4dWL03zPk)
