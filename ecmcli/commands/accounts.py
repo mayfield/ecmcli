@@ -2,7 +2,7 @@
 Manage ECM Accounts.
 """
 
-import sys
+import shellish
 from . import base
 
 
@@ -36,16 +36,6 @@ class Show(Formatter, base.ECMCommand):
 
     name = 'show'
 
-    tree_L = '└── '.encode().decode()
-    tree_T = '├── '
-    tree_vertspace = '│   '
-    try:
-        tree_L.encode(sys.stdout.encoding)
-    except UnicodeEncodeError:
-        tree_L = '\-- '
-        tree_T = '+-- '
-        tree_vertspace = '|   '
-
     def setup_args(self, parser):
         self.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME', nargs='?',
                           complete=self.make_completer('accounts', 'name'))
@@ -65,45 +55,29 @@ class Show(Formatter, base.ECMCommand):
         already include descendants;  Build our own tree and do account level
         filtering client-side.  This theory is proven as of ECM 7-18-2015. """
         if self.api.account:
-            root_id = self.api.account
+            root_id = str(self.api.account)
             self.api.account = None
         else:
             root_id = None
         accounts_pager = self.api.get_pager('accounts', page_size=10000)
         accounts = dict((x['resource_uri'], x) for x in accounts_pager)
-        root_ref = root = {
-            "children": []
-        }
-        pruned = accounts.copy()
+        root_ref = root = {"node": shellish.TreeNode('root')}
         for uri, x in accounts.items():
-            parent = pruned.get(x['account'], root)
-            if root_id is not None and x['id'] == str(root_id):
+            parent = accounts.get(x['account'], root)
+            if 'node' not in parent:
+                parent['node'] = shellish.TreeNode(parent)
+            if 'node' not in x:
+                x['node'] = shellish.TreeNode(x)
+            parent['node'].children.append(x['node'])
+            if root_id is not None and x['id'] == root_id:
                 root_ref = x
-            if 'children' not in parent:
-                parent['children'] = []
-            parent['children'].append(x)
         if root_ref == root:
-            root_ref = root['children']
+            root_ref = root['node'].children
         else:
-            root_ref = [root_ref]
-        self.account_tree(root_ref)
-
-    def account_tree(self, accounts, prefix=None):
-        end = len(accounts) - 1
-        for i, x in enumerate(sorted(accounts, key=lambda x: x['name'])):
-            if prefix is not None:
-                line = [prefix]
-                if end == i:
-                    line.append(self.tree_L)
-                else:
-                    line.append(self.tree_T)
-            else:
-                line = ['']
-            print(''.join(line) + self.formatter(x))
-            if x.get('children'):
-                if prefix is not None:
-                    line[-1] = '    ' if end == i else self.tree_vertspace
-                self.account_tree(x['children'], prefix=''.join(line))
+            root_ref = [root_ref['node']]
+        t = shellish.Tree(formatter=lambda x: self.formatter(x.value),
+                          sort_key=lambda x: x.value['id'])
+        t.render(root_ref)
 
 
 class Create(base.ECMCommand):
