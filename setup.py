@@ -25,7 +25,7 @@ setup(
     long_description=long_desc(),
     packages=find_packages(),
     install_requires=[
-        'syndicate',
+        'syndicate==1.1.0',
         'shellish==0.4.0',
         'humanize'
     ],
