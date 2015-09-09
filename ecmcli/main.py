@@ -38,18 +38,10 @@ class ECMRoot(base.ECMCommand):
         distro = pkg_resources.get_distribution('ecmcli')
         self.add_argument('--api_username')
         self.add_argument('--api_password')
-        self.add_argument('--api_account', help='Limit activity to this '
-                          'account')
         self.add_argument('--api_site',
                           help='E.g. https://cradlepointecm.com')
         self.add_argument('--version', action='version',
                           version=distro.version)
-
-    def prerun(self, args):
-        if args.api_account:
-            account = self.api.get_by_id_or_name('accounts', args.api_account)
-            self.api.account = account['id']
-        super().prerun(args)
 
     def run(self, args):
         self.shell()

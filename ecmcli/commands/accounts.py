@@ -2,39 +2,86 @@
 Manage ECM Accounts.
 """
 
-import shellish
 from . import base
+from shellish import layout
 
 
 class Formatter(object):
+
+    terse_table_fields = (
+        (lambda x: x['name'], 'Name'),
+        (lambda x: x['id'], 'ID'),
+        (lambda x: len(x['groups']), 'Groups'),
+        (lambda x: x['customer']['customer_name'], 'Customer'),
+        (lambda x: x['customer']['contact_name'], 'Contact')
+    )
+
+    verbose_table_fields = (
+        (lambda x: x['name'], 'Name'),
+        (lambda x: x['id'], 'ID'),
+        (lambda x: len(x['groups']), 'Groups'),
+        (lambda x: x['routers_count'], 'Routers'),
+        (lambda x: x['user_profiles_count'], 'Users'),
+        (lambda x: x['subaccounts_count'], 'Subaccounts'),
+        (lambda x: x['customer']['customer_name'], 'Customer'),
+        (lambda x: x['customer']['contact_name'], 'Contact')
+    )
+
+    expands = [
+        'groups',
+        'customer',
+        'settings_bindings.setting'
+    ]
 
     def setup_args(self, parser):
         self.add_argument('-v', '--verbose', action='store_true')
         super().setup_args(parser)
 
     def prerun(self, args):
-        self.formatter = self.verbose_formatter if args.verbose else \
-                         self.terse_formatter
+        self.verbose = args.verbose
+        if args.verbose:
+            self.formatter = self.verbose_formatter
+            self.table_fields = self.verbose_table_fields
+        else:
+            self.formatter = self.terse_formatter
+            self.table_fields = self.terse_table_fields
+        self.table = layout.Table([None] * len(self.table_fields),
+                                  [x[1] for x in self.table_fields])
         super().prerun(args)
+
+    def safe_get(self, func, arg, default=None):
+        try:
+            return func(arg)
+        except:
+            return default
+
+    def table_render(self, accounts):
+        self.table.write([[self.safe_get(xx[0], x, '')
+                           for xx in self.table_fields]
+                          for x in map(self.bundle, accounts)])
+
+    def bundle(self, account):
+        if self.verbose:
+            counts = ['routers', 'user_profiles', 'subaccounts']
+            for x in counts:
+                n = self.api.get(urn=account[x], count='id')[0]['id_count']
+                account['%s_count' % x] = n
+        account['groups_count'] = len(account['groups'])
+        return account
 
     def terse_formatter(self, account):
         return '%(name)s (id:%(id)s)' % account
 
     def verbose_formatter(self, account):
-        count = dict.fromkeys(['routers', 'groups', 'user_profiles',
-                               'subaccounts'], 0)
-        for x in count:
-            n = self.api.get(urn=account[x], count='id')[0]['id_count']
-            account['%s_count' % x] = n
         return '%(name)s (id:%(id)s, routers:%(routers_count)d ' \
                'groups:%(groups_count)d, users:%(user_profiles_count)d, ' \
                'subaccounts:%(subaccounts_count)d)' % account
 
 
-class Show(Formatter, base.ECMCommand):
-    """ Show accounts """
+class Tree(Formatter, base.ECMCommand):
+    """ Show account Tree """
 
-    name = 'show'
+    name = 'tree'
 
     def setup_args(self, parser):
         self.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME', nargs='?',
@@ -43,31 +90,26 @@ class Show(Formatter, base.ECMCommand):
 
     def run(self, args):
         if args.ident:
-            account = self.api.get_by_id_or_name('accounts', args.ident)
-            print(self.formatter(account))
+            root_id = self.api.get_by_id_or_name('accounts', args.ident)['id']
         else:
-            return self.show_tree()
+            root_id = None
+        self.show_tree(root_id)
 
-    def show_tree(self):
+    def show_tree(self, root_id):
         """ Huge page size for accounts costs nearly nothing, but api calls
         are extremely expensive.  The fastest and best way to get accounts and
         their descendants is to get massive pages from the root level, which
         already include descendants;  Build our own tree and do account level
         filtering client-side.  This theory is proven as of ECM 7-18-2015. """
-        if self.api.account:
-            root_id = str(self.api.account)
-            self.api.account = None
-        else:
-            root_id = None
         accounts_pager = self.api.get_pager('accounts', page_size=10000)
         accounts = dict((x['resource_uri'], x) for x in accounts_pager)
-        root_ref = root = {"node": shellish.TreeNode('root')}
+        root_ref = root = {"node": layout.TreeNode('root')}
         for uri, x in accounts.items():
             parent = accounts.get(x['account'], root)
             if 'node' not in parent:
-                parent['node'] = shellish.TreeNode(parent)
+                parent['node'] = layout.TreeNode(parent)
             if 'node' not in x:
-                x['node'] = shellish.TreeNode(x)
+                x['node'] = layout.TreeNode(x)
             parent['node'].children.append(x['node'])
             if root_id is not None and x['id'] == root_id:
                 root_ref = x
@@ -75,9 +117,29 @@ class Show(Formatter, base.ECMCommand):
             root_ref = root['node'].children
         else:
             root_ref = [root_ref['node']]
-        t = shellish.Tree(formatter=lambda x: self.formatter(x.value),
-                          sort_key=lambda x: x.value['id'])
+        formatter = lambda x: self.formatter(self.bundle(x.value))
+        t = layout.Tree(formatter=formatter, sort_key=lambda x: x.value['id'])
         t.render(root_ref)
+
+
+class Show(Formatter, base.ECMCommand):
+    """ Show account info. """
+
+    name = 'show'
+
+    def setup_args(self, parser):
+        self.add_argument('idents', metavar='ACCOUNT_ID_OR_NAME', nargs='*',
+                          complete=self.make_completer('accounts', 'name'))
+        super().setup_args(parser)
+
+    def run(self, args):
+        expands = ','.join(self.expands)
+        if args.idents:
+            accounts = [self.api.get_by_id_or_name('accounts', x, expand=expands)
+                        for x in args.idents]
+        else:
+            accounts = self.api.get_pager('accounts', expand=expands)
+        self.table_render(accounts)
 
 
 class Create(base.ECMCommand):
@@ -160,7 +222,8 @@ class Search(Formatter, base.ECMCommand):
     name = 'search'
 
     def setup_args(self, parser):
-        searcher = self.make_searcher('accounts', ['name'])
+        expands = ','.join(self.expands)
+        searcher = self.make_searcher('accounts', ['name'], expand=expands)
         self.lookup = searcher.lookup
         self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+',
                           help=searcher.help, complete=searcher.completer)
@@ -170,8 +233,7 @@ class Search(Formatter, base.ECMCommand):
         results = list(self.lookup(args.search))
         if not results:
             raise SystemExit("No results for: %s" % ' '.join(args.search))
-        for x in results:
-            print(self.formatter(x))
+        self.table_render(results)
 
 
 class Accounts(base.ECMCommand):
@@ -182,6 +244,7 @@ class Accounts(base.ECMCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_subcommand(Show, default=True)
+        self.add_subcommand(Tree)
         self.add_subcommand(Create)
         self.add_subcommand(Delete)
         self.add_subcommand(Move)
