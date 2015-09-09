@@ -1,7 +1,7 @@
 # Change Log
 
 
-## [Unreleased][unreleased]
+## [Unreleased] - unreleased
 ### Changed
 - TBD
 
