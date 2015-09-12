@@ -44,7 +44,7 @@ class ECMRoot(base.ECMCommand):
                           version=distro.version)
 
     def run(self, args):
-        self.shell()
+        self.interact()
 
 
 def main():

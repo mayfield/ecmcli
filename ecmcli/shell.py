@@ -10,19 +10,20 @@ from . import api
 
 class ECMShell(shellish.Shell):
 
+    default_prompt_format = r': \033[7m{user}\033[0m@{site} /{cwd} ; \n:; '
     intro = '\n'.join([
         'Welcome to the ECM shell.',
         'Type "help" or "?" to list commands and "exit" to quit.'
     ])
 
-    @property
-    def prompt(self):
-        info = {
+    def prompt_info(self):
+        info = super().prompt_info()
+        info.update({
             "user": self.api.ident['user']['username'],
             "site": self.api.site.split('//', 1)[1],
             "cwd": '/'.join(x['name'] for x in self.cwd)
-        }
-        return ': \033[7m%(user)s\033[0m@%(site)s /%(cwd)s ; \n:; ' % (info)
+        })
+        return info
 
     def __init__(self, root_command):
         super().__init__(root_command)
