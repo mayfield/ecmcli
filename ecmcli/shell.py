@@ -10,7 +10,7 @@ from . import api
 
 class ECMShell(shellish.Shell):
 
-    default_prompt_format = r': \033[7m{user}\033[0m@{site} /{cwd} ; \n:; '
+    default_prompt_format = r': \033[7m{user}\033[0m@{site} /{cwd} ; \n:;'
     intro = '\n'.join([
         'Welcome to the ECM shell.',
         'Type "help" or "?" to list commands and "exit" to quit.'

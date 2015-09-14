@@ -307,7 +307,7 @@ class Clients(base.ECMCommand):
             for x in clients['data']:
                 hostname = dns.get(x['mac'], {}).get('hostname')
                 data.append([router, x['ip_address'], hostname, x['mac']])
-            t.write(data)
+            t.print(data)
 
 
 class Routers(base.ECMCommand):

@@ -40,6 +40,6 @@ class WanRate(base.ECMCommand):
                 else:
                     value = '[%s]' % x['reason']
                 routers_by_id[str(x['id'])]['bps'] = value
-            table.write_row([x['bps'] for x in routers])
+            table.print_row([x['bps'] for x in routers])
 
 command_classes = [WanRate]

@@ -45,8 +45,7 @@ class Formatter(object):
         else:
             self.formatter = self.terse_formatter
             self.table_fields = self.terse_table_fields
-        self.table = layout.Table([None] * len(self.table_fields),
-                                  [x[1] for x in self.table_fields])
+        self.table = layout.Table(headers=[x[1] for x in self.table_fields])
         super().prerun(args)
 
     def safe_get(self, func, arg, default=None):
@@ -56,7 +55,7 @@ class Formatter(object):
             return default
 
     def table_render(self, accounts):
-        self.table.write([[self.safe_get(xx[0], x, '')
+        self.table.print([[self.safe_get(xx[0], x, '')
                            for xx in self.table_fields]
                           for x in map(self.bundle, accounts)])
 
