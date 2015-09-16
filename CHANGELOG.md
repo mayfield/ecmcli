@@ -2,6 +2,9 @@
 
 
 ## [Unreleased] - unreleased
+### Added
+- 'routers clients' command will lookup MAC address hw provider.
+- WiFi stats for verbose mode of 'routers clients' command.
 
 
 ## [2.1.0] - 2015-09-09
