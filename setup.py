@@ -32,6 +32,7 @@ setup(
     entry_points = {
         'console_scripts': ['ecm=ecmcli.main:main'],
     },
+    include_package_data=True,
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
