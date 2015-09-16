@@ -3,7 +3,10 @@ Manage ECM Routers.
 """
 
 import humanize
+import pickle
+import pkg_resources
 from . import base
+from shellish.layout import Table
 
 
 class Printer(object):
@@ -278,6 +281,49 @@ class Clients(base.ECMCommand):
     def setup_args(self, parser):
         self.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='*',
                           complete=self.make_completer('routers', 'name'))
+        self.add_argument('-v', '--verbose', action="store_true")
+
+    @property
+    def mac_db(self):
+        try:
+            return self._mac_db
+        except AttributeError:
+            mac_db = pkg_resources.resource_stream('ecmcli', 'mac.db')
+            self._mac_db = pickle.load(mac_db)
+            return self._mac_db
+
+    def mac_lookup_short(self, info):
+        return self.mac_lookup(info, 0)
+
+    def mac_lookup_long(self, info):
+        return self.mac_lookup(info, 1)
+
+    def mac_lookup(self, info, idx):
+        mac = int(''.join(info['mac'].split(':')[:3]), 16)
+        localadmin =  mac & 0x20000
+        # This really only pertains to cradlepoint devices.
+        if localadmin and mac not in self.mac_db:
+            mac &= 0xffff
+        return self.mac_db.get(mac, [None, None])[idx]
+
+    def make_dns_getter(self, ids):
+        dns = {}
+        for leases in self.api.get_pager('remote', '/status/dhcpd/leases',
+                                         id__in=','.join(ids)):
+            if not leases['success']:
+                continue
+            dns.update(dict((x['mac'], x['hostname'])
+                            for x in leases['data']))
+        return lambda x: dns.get(x['mac'], '')
+
+    def make_wifi_getter(self, ids):
+        wifi = {}
+        for wclients in self.api.get_pager('remote', '/status/wlan/clients',
+                                           id__in=','.join(ids)):
+            if not wclients['success']:
+                continue
+            wifi.update(dict((x['mac'], x) for x in wclients['data']))
+        return lambda x: wifi.get(x['mac'], {})
 
     def run(self, args):
         if args.idents:
@@ -289,25 +335,30 @@ class Clients(base.ECMCommand):
                    if x['state'] == 'online')
         if not ids:
             raise SystemExit("No online routers found")
-        t = self.tabulate([['Router', 'IP Address', 'Hostname', 'MAC']])
-        # Generate a dns db first.
-        dns = {}
-        for leases in self.api.get_pager('remote', '/status/dhcpd/leases',
-                                         id__in=','.join(ids)):
-            if not leases['success']:
-                continue
-            dns.update(dict((x['mac'], x) for x in leases['data']))
+        data = []
         for clients in self.api.get_pager('remote', '/status/lan/clients',
                                           id__in=','.join(ids)):
             if not clients['success']:
-                print('XXX Skipping: %s' % clients)
                 continue
-            router = ids[str(clients['id'])]
-            data = []
             for x in clients['data']:
-                hostname = dns.get(x['mac'], {}).get('hostname')
-                data.append([router, x['ip_address'], hostname, x['mac']])
-            t.print(data)
+                x['router'] = ids[str(clients['id'])]
+                data.append(x)
+        dns_getter = self.make_dns_getter(ids)
+        headers = ['Router', 'IP Address', 'Hostname', 'MAC', 'Hardware']
+        accessors = ['router', 'ip_address', dns_getter, 'mac']
+        if not args.verbose:
+            accessors.append(self.mac_lookup_short)
+        else:
+            wifi_getter = self.make_wifi_getter(ids)
+            headers.extend(['WiFi Signal', 'WiFi Speed'])
+            na = '<dim>n/a</dim>'
+            accessors.extend([
+                self.mac_lookup_long,
+                lambda x: wifi_getter(x).get('rssi0', na),
+                lambda x: wifi_getter(x).get('txrate', na)
+            ])
+        table = Table(headers=headers, accessors=accessors)
+        table.print(data)
 
 
 class Routers(base.ECMCommand):
