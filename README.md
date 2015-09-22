@@ -1,6 +1,6 @@
 ecmcli
 ===========
-*_CLI for Cradlepoint ECM_*
+_*CLI for Cradlepoint ECM*_
 
 [![Maturity](https://img.shields.io/pypi/status/ecmcli.svg)](https://pypi.python.org/pypi/ecmcli)
 [![License](https://img.shields.io/pypi/l/ecmcli.svg)](https://pypi.python.org/pypi/ecmcli)
