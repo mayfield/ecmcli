@@ -1,16 +1,20 @@
-ecmcli - CLI for Cradlepoint ECM
+ecmcli
 ===========
+*_CLI for Cradlepoint ECM_*
+
+[![Maturity](https://img.shields.io/pypi/status/ecmcli.svg)](https://pypi.python.org/pypi/ecmcli)
+[![License](https://img.shields.io/pypi/l/ecmcli.svg)](https://pypi.python.org/pypi/ecmcli)
+[![Change Log](https://img.shields.io/badge/change-log-blue.svg)](https://github.com/mayfield/ecmcli/blob/master/CHANGELOG.md)
+[![Build Status](https://semaphoreci.com/api/v1/projects/a1b17c52-185a-4cc6-ad28-d7f5883bca42/533645/shields_badge.svg)](https://semaphoreci.com/mayfield/ecmcli)
+[![Version](https://img.shields.io/pypi/v/ecmcli.svg)](https://pypi.python.org/pypi/ecmcli)
+
+
+About
+--------
 
 Installation provides a command line utility (ecm) which can be used to
 interact with Cradlepoint's ECM service.  Commands are subtasks of the
 ECM utility.  The full list of subtasks are visible by running 'ecm --help'.
-
-
-Status
---------
-
-[![Change Log](https://img.shields.io/badge/change-log-blue.svg)](https://github.com/mayfield/ecmcli/blob/master/CHANGELOG.md)
-[![Build Status](https://semaphoreci.com/api/v1/projects/a1b17c52-185a-4cc6-ad28-d7f5883bca42/533645/shields_badge.svg)](https://semaphoreci.com/mayfield/ecmcli)
 
 
 Walkthrough Video
@@ -21,7 +25,8 @@ Walkthrough Video
 Requirements
 --------
 
-* Syndicate Python Library
+* syndicate Python Library
+* shellish Python Library
 * humanize Python Library
 * ECM Login
 
