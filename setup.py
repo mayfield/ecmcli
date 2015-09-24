@@ -26,7 +26,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'syndicate==1.2.0',
-        'shellish>=0.5.8',
+        'shellish>=0.5.9',
         'humanize'
     ],
     entry_points = {

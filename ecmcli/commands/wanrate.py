@@ -36,7 +36,11 @@ class WanRate(base.ECMCommand):
             time.sleep(max(0, args.sampletime - (time.time() - start)))
             for x in data:
                 if x['success']:
-                    value = humanize.naturalsize(x['data'], binary=True)
+                    if x['data'] > 1024:
+                        value = humanize.naturalsize(x['data'], gnu=True, format='%.1f ') + 'bps'
+                    else:
+                        value = x['data'] + ' bps'
+                    value = value.lower()
                 else:
                     value = '[%s]' % x['reason']
                 routers_by_id[str(x['id'])]['bps'] = value

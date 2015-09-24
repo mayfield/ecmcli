@@ -21,8 +21,7 @@ class FlashLEDS(base.ECMCommand):
             print("    %s (%s)" % (rinfo['name'], rinfo['id']))
             ids.append(rinfo['id'])
         rfilter = {
-            "id__in": ','.join(ids),
-            "timeout": 0
+            "id__in": ','.join(ids)
         }
         leds = dict.fromkeys((
             "LED_ATTENTION",

@@ -4,6 +4,7 @@ Bootstrap the shell and commands and then run either one.
 
 import importlib
 import pkg_resources
+import shellish
 import sys
 from . import api
 from .commands import base
@@ -49,6 +50,7 @@ class ECMRoot(base.ECMCommand):
 
 def main():
     root = ECMRoot(api=api.ECMService())
+    root.add_subcommand(shellish.SystemCompletionSetup)
     for modname in command_modules:
         module = importlib.import_module('.%s' % modname, 'ecmcli.commands')
         for Command in module.command_classes:
