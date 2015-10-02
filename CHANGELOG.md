@@ -4,6 +4,17 @@
 ## [Unreleased] - unreleased
 
 
+## [2.4.0] - 2015-10-02
+### Added
+- GPIO Command provided by @zvickery.
+
+### Changed
+- API connection is now encased in the ctrl-c interrupt verbosity guard.
+
+### Fixed
+- Router identity argument for reboot command.
+
+
 ## [2.3.0] - 2015-09-23
 ### Added
 - 'routers clients' command will lookup MAC address hw provider.
@@ -38,7 +49,8 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v2.3.0...HEAD
+[unreleased]: https://github.com/mayfield/ecmcli/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/mayfield/ecmcli/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/mayfield/ecmcli/compare/v2.1.0...v2.3.0
 [2.1.0]: https://github.com/mayfield/ecmcli/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/mayfield/ecmcli/compare/v0.5.0...v2.0.0
