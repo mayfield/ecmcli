@@ -1,5 +1,7 @@
 ecmcli
 ===========
+
+[![Join the chat at https://gitter.im/mayfield/ecmcli](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/mayfield/ecmcli?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 _*CLI for Cradlepoint ECM*_
 
 [![Maturity](https://img.shields.io/pypi/status/ecmcli.svg)](https://pypi.python.org/pypi/ecmcli)
