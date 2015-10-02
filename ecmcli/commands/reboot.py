@@ -16,7 +16,8 @@ class Reboot(base.ECMCommand):
 
     def run(self, args):
         if args.idents:
-            routers = map(self.api.get_by_id_or_name, args.idents)
+            routers = [self.api.get_by_id_or_name('routers', r)
+                       for r in args.idents]
         else:
             routers = self.api.get_pager('routers')
         for x in routers:

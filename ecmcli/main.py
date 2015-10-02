@@ -14,6 +14,7 @@ command_modules = [
     'alerts',
     'config',
     'flashleds',
+    'gpio',
     'groups',
     'logs',
     'reboot',
@@ -56,9 +57,9 @@ def main():
         for Command in module.command_classes:
             root.add_subcommand(Command)
     args = root.argparser.parse_args()
-    root.api.connect(args.api_site, username=args.api_username,
-                     password=args.api_password)
     try:
+        root.api.connect(args.api_site, username=args.api_username,
+                         password=args.api_password)
         root(args)
     except KeyboardInterrupt:
         sys.exit(1)
