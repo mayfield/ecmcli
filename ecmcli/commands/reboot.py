@@ -11,8 +11,9 @@ class Reboot(base.ECMCommand):
     name = 'reboot'
 
     def setup_args(self, parser):
-        parser.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='*')
-        parser.add_argument('-f', '--force', action='store_true')
+        self.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='*',
+                          complete=self.make_completer('routers', 'name'))
+        self.add_argument('-f', '--force', action='store_true')
 
     def run(self, args):
         if args.idents:

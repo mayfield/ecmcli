@@ -32,19 +32,19 @@ class GPIO(base.ECMCommand):
     name = 'gpio'
 
     def setup_args(self, parser):
-        parser.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
-        parser.add_argument('-v', '--value', metavar="GPIO_VALUE",
-                            default=None)
+        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME',
+                          complete=self.make_completer('routers', 'name'))
+        self.add_argument('-v', '--value', type=int, metavar="GPIO_VALUE", default=None)
 
     def human_status(self, status):
-        return 'OFF' if status == 0 else 'ON'
+        return 'OFF (0)' if status == 0 else 'ON (1)'
 
     def run(self, args):
-        gpio_path = '/config/system/connector_gpio/output'
+        gpio_path = 'config/system/connector_gpio/output'
         r = self.api.get_by_id_or_name('routers', args.ident)
 
         if args.value:
-            val = int(args.value)
+            val = args.value
             print('Setting GPIO on %s (%s) to: %s' % (r['name'], r['id'],
                   self.human_status(val)))
             g = GPIOResponse(self.api.put('remote', gpio_path, val,
