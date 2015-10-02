@@ -1,7 +1,6 @@
 ecmcli
 ===========
 
-[![Join the chat at https://gitter.im/mayfield/ecmcli](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/mayfield/ecmcli?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 _*CLI for Cradlepoint ECM*_
 
 [![Maturity](https://img.shields.io/pypi/status/ecmcli.svg)](https://pypi.python.org/pypi/ecmcli)
@@ -9,7 +8,7 @@ _*CLI for Cradlepoint ECM*_
 [![Change Log](https://img.shields.io/badge/change-log-blue.svg)](https://github.com/mayfield/ecmcli/blob/master/CHANGELOG.md)
 [![Build Status](https://semaphoreci.com/api/v1/projects/a1b17c52-185a-4cc6-ad28-d7f5883bca42/533645/shields_badge.svg)](https://semaphoreci.com/mayfield/ecmcli)
 [![Version](https://img.shields.io/pypi/v/ecmcli.svg)](https://pypi.python.org/pypi/ecmcli)
-
+[![Chat](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/mayfield/ecmcli?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 About
 --------
