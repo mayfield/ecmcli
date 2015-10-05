@@ -25,11 +25,12 @@ class Alerts(base.ECMCommand):
 
     def run(self, args):
         by_type = collections.OrderedDict()
-        alerts = self.api.get_pager('alerts', order_by='-created_ts')
+        alerts = self.api.get_pager('alerts', page_size=500,
+                                    order_by='-created_ts')
         msg = "\rCollecting new alerts: %5d"
         print(msg % 0, end='')
         sys.stdout.flush()
-        for i, x in enumerate(alerts):
+        for i, x in enumerate(alerts, 1):
             print(msg % i, end='')
             sys.stdout.flush()
             try:

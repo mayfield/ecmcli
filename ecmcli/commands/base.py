@@ -36,7 +36,7 @@ class ECMCommand(shellish.Command):
         returns a list of .field values.  The function returned takes
         one argument to filter by an optional 'startswith' criteria. """
 
-        def fn(startswith):
+        def fn(startswith, args):
             return self.api_complete(resource, field, startswith)
 
         fn.__name__ = '<completer for %s:%s>' % (resource, field)
@@ -92,7 +92,7 @@ class ECMCommand(shellish.Command):
             return self.api_search(resource, fields, terms,
                                    **merged_options)
 
-        def complete(startswith):
+        def complete(startswith, args):
             if ':' in startswith:
                 field, value = startswith.split(':', 1)
                 if field in fields:
@@ -115,3 +115,52 @@ class ECMCommand(shellish.Command):
 
         help = 'Search "%s" on fields: %s' % (resource, ', '.join(fields))
         return self.Searcher(lookup, complete, help)
+
+    def add_completer_argument(self, *keys, resource=None, res_field=None,
+                               **options):
+        if not keys:
+            keys = ('ident',)
+            nargs = options.get('nargs')
+            if (isinstance(nargs, int) and nargs > 1) or \
+               nargs and nargs in '+*':
+                keys = ('idents',)
+        options["complete"] = self.make_completer(resource, res_field)
+        return self.add_argument(*keys, **options)
+
+    def add_router_argument(self, *keys, **options):
+        options.setdefault('metavar', 'ROUTER_ID_OR_NAME')
+        options.setdefault('help', 'The ID or name of a router')
+        return self.add_completer_argument(*keys, resource='routers',
+                                           res_field='name', **options)
+
+    def add_group_argument(self, *keys, **options):
+        options.setdefault('metavar', 'GROUP_ID_OR_NAME')
+        options.setdefault('help', 'The ID or name of a group')
+        return self.add_completer_argument(*keys, resource='groups',
+                                           res_field='name', **options)
+
+    def add_account_argument(self, *keys, **options):
+        options.setdefault('metavar', 'ACCOUNT_ID_OR_NAME')
+        options.setdefault('help', 'The ID or name of an account')
+        return self.add_completer_argument(*keys, resource='accounts',
+                                           res_field='name', **options)
+
+    def add_product_argument(self, *keys, **options):
+        options.setdefault('metavar', 'PRODUCT_ID_OR_NAME')
+        options.setdefault('help', 'Product name, Eg. MBR1400')
+        return self.add_completer_argument(*keys, resource='products',
+                                           res_field='name', **options)
+
+    def add_firmware_argument(self, *keys, **options):
+        options.setdefault('metavar', 'FIRMWARE_VERSION')
+        options.setdefault('help', 'Version identifier, Eg. 5.4.1')
+        return self.add_completer_argument(*keys, resource='firmwares',
+                                           res_field='version', **options)
+
+    def add_search_argument(self, searcher, *keys, **options):
+        if not keys:
+            keys = ('search',)
+        options.setdefault('metavar', 'SEARCH_CRITERIA')
+        options.setdefault('nargs', '+')
+        return self.add_argument(*keys, help=searcher.help,
+                                 complete=searcher.completer, **options)

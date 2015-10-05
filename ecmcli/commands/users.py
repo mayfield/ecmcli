@@ -4,6 +4,7 @@ List/Edit/Manage ECM Users.
 
 import datetime
 import getpass
+import shellish
 from . import base
 
 
@@ -65,10 +66,16 @@ class Common(object):
             ('id', 'ID'),
             ('email', 'EMail')
         ]
-        rows = [[x[1] for x in fields]]
-        rows.extend([x[f[0]] for f in fields]
-                    for x in map(self.bundle_user, users))
-        self.tabulate(rows)
+        table = shellish.Table(headers=[x[1] for x in fields],
+                               accessors=[x[0] for x in fields])
+        table.print(map(self.bundle_user, users))
+
+    def add_username_argument(self, *keys, **options):
+        if not keys:
+            keys = ('username',)
+        options.setdefault("metavar", 'USERNAME')
+        return self.add_completer_argument(*keys, resource='users',
+                                           res_field='username', **options)
 
 
 class Show(Common, base.ECMCommand):
@@ -77,8 +84,7 @@ class Show(Common, base.ECMCommand):
     name = 'show'
 
     def setup_args(self, parser):
-        self.add_argument('username', metavar='USERNAME', nargs='?',
-                          complete=self.make_completer('users', 'username'))
+        self.add_username_argument(nargs='?')
         self.add_argument('-v', '--verbose', action='store_true')
 
     def run(self, args, users=None):
@@ -144,8 +150,7 @@ class Edit(Common, base.ECMCommand):
     name = 'edit'
 
     def setup_args(self, parser):
-        self.add_argument('username', metavar='USERNAME',
-                          complete=self.make_completer('users', 'username'))
+        self.add_username_argument()
         self.add_argument('--email')
         self.add_argument('--fullname')
         self.add_argument('--session_length', type=int)
@@ -172,12 +177,11 @@ class Delete(Common, base.ECMCommand):
     name = 'delete'
 
     def setup_args(self, parser):
-        self.add_argument('username', metavar='USERNAME', nargs='+',
-                          complete=self.make_completer('users', 'username'))
+        self.add_username_argument('usernames', nargs='+')
         self.add_argument('-f', '--force', action="store_true")
 
     def run(self, args):
-        for username in args.username:
+        for username in args.usernames:
             user = self.get_user(username)
             if not args.force and \
                not base.confirm('Delete user: %s' % username, exit=False):
@@ -191,9 +195,9 @@ class Move(Common, base.ECMCommand):
     name = 'move'
 
     def setup_args(self, parser):
-        self.add_argument('username', metavar='USERNAME',
-                          complete=self.make_completer('users', 'username'))
-        self.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
+        self.add_username_argument()
+        self.add_account_argument('new_account',
+                                  metavar='NEW_ACCOUNT_ID_OR_NAME')
 
     def run(self, args):
         user = self.get_user(args.username)
@@ -229,8 +233,7 @@ class Search(Common, base.ECMCommand):
     def setup_args(self, parser):
         searcher = self.make_searcher('users', self.fields)
         self.lookup = searcher.lookup
-        self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+',
-                          help=searcher.help, complete=searcher.completer)
+        self.add_search_argument(searcher)
         self.add_argument('-v', '--verbose', action='store_true')
 
     def run(self, args):

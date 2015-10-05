@@ -12,13 +12,14 @@ class Logs(base.ECMCommand):
     levels = ['debug', 'info', 'warning', 'error', 'critical']
 
     def setup_args(self, parser):
-        parser.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='*')
-        parser.add_argument('--clear', action='store_true', help="Clear logs")
-        parser.add_argument('-l', '--level', choices=self.levels)
+        self.add_router_argument('idents', nargs='*')
+        self.add_argument('--clear', action='store_true', help="Clear logs")
+        self.add_argument('-l', '--level', choices=self.levels)
 
     def run(self, args):
         if args.idents:
-            routers = map(self.api.get_by_id_or_name, args.idents)
+            routers = [self.api.get_by_id_or_name('routers', x)
+                       for x in args.idents]
         else:
             routers = self.api.get_pager('routers')
         if args.clear:

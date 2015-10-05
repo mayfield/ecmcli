@@ -5,8 +5,8 @@ Manage ECM Routers.
 import humanize
 import pickle
 import pkg_resources
+import shellish
 from . import base
-from shellish.layout import Table
 
 
 class Printer(object):
@@ -14,7 +14,9 @@ class Printer(object):
 
     terse_expands = ','.join([
         'account',
-        'group'
+        'group',
+        'product',
+        'actual_firmware'
     ])
     verbose_expands = ','.join([
         'account',
@@ -43,6 +45,7 @@ class Printer(object):
             'config_status': 'Config Status',
             'custom1': 'Custom 1',
             'custom2': 'Custom 2',
+            'dashboard_url': 'Dashboard URL',
             'desc': 'Description',
             'entitlements': 'Entitlements',
             'firmware_info': 'Firmware',
@@ -53,34 +56,28 @@ class Printer(object):
             'locality': 'Locality',
             'location_info': 'Location',
             'mac': 'MAC',
-            'name': 'Name',
             'product_info': 'Product',
             'quarantined': 'Quarantined',
             'serial_number': 'Serial Number',
             'since': 'Connection Time',
             'state': 'Connection',
-            'dashboard_url': 'Dashboard URL'
         }
         location_url = 'https://maps.google.com/maps?' \
                        'q=loc:%(latitude)f+%(longitude)f'
-        offset = max(map(len, fields.values())) + 2
-        fmt = '%%-%ds: %%s' % offset
+        key_col_width = max(map(len, fields.values()))
         first = True
         for x in routers:
             if first:
                 first = False
             else:
                 print()
-            print('*' * 10, '%s (%s) - %s - %s' % (x['name'], x['id'],
-                  x['mac'], x['ip_address']), '*' * 10)
+            x = self.bundle_router(x)
+            t = shellish.Table(columns=[key_col_width, None],
+                               headers=['Router Name', x['name']])
             x['since'] = self.since(x['state_ts'])
             x['joined'] = self.since(x['create_ts']) + ' ago'
             x['account_info'] = '%s (%s)' % (x['account']['name'],
                                              x['account']['id'])
-            x['group_name'] = self.group_name(x['group'])
-            x['product_info'] = x['product']['name']
-            fw = x['actual_firmware']
-            x['firmware_info'] = fw['version'] if fw else '<unsupported>'
             loc = x.get('last_known_location')
             x['location_info'] = location_url % loc if loc else ''
             ents = x['featurebindings']
@@ -90,7 +87,7 @@ class Printer(object):
             x['dashboard_url'] = 'https://cradlepointecm.com/ecm.html' \
                                  '#devices/dashboard?id=%s' % x['id']
             for key, label in sorted(fields.items(), key=lambda x: x[1]):
-                print(fmt % (label, x[key]))
+                t.print_row([label, x[key]])
 
     def group_name(self, group):
         """ Sometimes the group is empty or a URN if the user is not
@@ -107,19 +104,23 @@ class Printer(object):
         fields = (
             ("name", "Name"),
             ("id", "ID"),
+            ("product_info", "Product"),
+            ("firmware_info", "Firmware"),
             ("account_name", "Account"),
             ("group_name", "Group"),
             ("ip_address", "IP Address"),
             ("state", "Conn")
         )
-        rows = [[x[1] for x in fields]]
-        rows.extend([x[f[0]] for f in fields]
-                    for x in map(self.bundle_router, routers))
-        self.tabulate(rows)
+        table = shellish.Table(headers=[x[1] for x in fields],
+                               accessors=[x[0]for x in fields])
+        table.print(map(self.bundle_router, routers))
 
     def bundle_router(self, router):
         router['account_name'] = router['account']['name']
         router['group_name'] = self.group_name(router['group'])
+        fw = router['actual_firmware']
+        router['firmware_info'] = fw['version'] if fw else ''
+        router['product_info'] = router['product']['name']
         return router
 
     def prerun(self, args):
@@ -138,8 +139,7 @@ class Show(Printer, base.ECMCommand):
     name = 'show'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME', nargs='?',
-                          complete=self.make_completer('routers', 'name'))
+        self.add_router_argument(nargs='?')
         super().setup_args(parser)
 
     def run(self, args):
@@ -163,8 +163,7 @@ class Search(Printer, base.ECMCommand):
     def setup_args(self, parser):
         searcher = self.make_searcher('routers', self.fields)
         self.lookup = searcher.lookup
-        self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+',
-                          help=searcher.help, complete=searcher.completer)
+        self.add_search_argument(searcher)
         super().setup_args(parser)
 
     def run(self, args):
@@ -180,10 +179,8 @@ class GroupAssign(base.ECMCommand):
     name = 'groupassign'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME',
-                          complete=self.make_completer('routers', 'name'))
-        self.add_argument('new_group', metavar='NEW_GROUP_ID_OR_NAME',
-                          complete=self.make_completer('groups', 'name'))
+        self.add_router_argument()
+        self.add_group_argument('new_group', metavar='NEW_GROUP_ID_OR_NAME')
         self.add_argument('-f', '--force', action='store_true')
 
     def run(self, args):
@@ -203,8 +200,7 @@ class GroupUnassign(base.ECMCommand):
     name = 'groupunassign'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME',
-                          complete=self.make_completer('routers', 'name'))
+        self.add_router_argument()
 
     def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident)
@@ -217,7 +213,7 @@ class Edit(base.ECMCommand):
     name = 'edit'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME')
+        self.add_router_argument()
         self.add_argument('--name')
         self.add_argument('--desc')
         self.add_argument('--asset_id')
@@ -241,10 +237,9 @@ class Move(base.ECMCommand):
     name = 'move'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME',
-                          complete=self.make_completer('routers', 'name'))
-        self.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME',
-                          complete=self.make_completer('accounts', 'name'))
+        self.add_router_argument()
+        self.add_account_argument('new_account',
+                                  metavar='NEW_ACCOUNT_ID_OR_NAME')
 
     def run(self, args):
         router = self.api.get_by_id_or_name('routers', args.ident)
@@ -259,11 +254,11 @@ class Delete(base.ECMCommand):
     name = 'delete'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME', nargs='+')
+        self.add_router_argument('idents', nargs='+')
         self.add_argument('-f', '--force', action='store_true')
 
     def run(self, args):
-        for id_or_name in args.ident:
+        for id_or_name in args.idents:
             router = self.api.get_by_id_or_name('routers', id_or_name)
             if not args.force and \
                not base.confirm('Delete router: %s, id:%s' % (router['name'],
@@ -279,8 +274,7 @@ class Clients(base.ECMCommand):
     name = 'clients'
 
     def setup_args(self, parser):
-        self.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='*',
-                          complete=self.make_completer('routers', 'name'))
+        self.add_router_argument('idents', nargs='*')
         self.add_argument('-v', '--verbose', action="store_true")
 
     @property
@@ -310,7 +304,7 @@ class Clients(base.ECMCommand):
         dns = {}
         for leases in self.api.get_pager('remote', '/status/dhcpd/leases',
                                          id__in=','.join(ids)):
-            if not leases['success']:
+            if not leases['success'] or not leases['data']:
                 continue
             dns.update(dict((x['mac'], x['hostname'])
                             for x in leases['data']))
@@ -320,7 +314,7 @@ class Clients(base.ECMCommand):
         wifi = {}
         for wclients in self.api.get_pager('remote', '/status/wlan/clients',
                                            id__in=','.join(ids)):
-            if not wclients['success']:
+            if not wclients['success'] or not wclients['data']:
                 continue
             wifi.update(dict((x['mac'], x) for x in wclients['data']))
         return lambda x: wifi.get(x['mac'], {})
@@ -330,7 +324,8 @@ class Clients(base.ECMCommand):
             routers = [self.api.get_by_id_or_name('routers', x)
                        for x in args.idents]
         else:
-            routers = self.api.get_pager('routers')
+            routers = self.api.get_pager('routers', state='online',
+                                         product__series=3)
         ids = dict((x['id'], x['name']) for x in routers
                    if x['state'] == 'online')
         if not ids:
@@ -357,8 +352,32 @@ class Clients(base.ECMCommand):
                 lambda x: wifi_getter(x).get('rssi0', na),
                 lambda x: wifi_getter(x).get('txrate', na)
             ])
-        table = Table(headers=headers, accessors=accessors)
+        table = shellish.Table(headers=headers, accessors=accessors)
         table.print(data)
+
+
+class Reboot(base.ECMCommand):
+    """ Reboot connected router(s). """
+
+    name = 'reboot'
+
+    def setup_args(self, parser):
+        self.add_router_argument('idents', nargs='*')
+        self.add_argument('-f', '--force', action='store_true')
+
+    def run(self, args):
+        if args.idents:
+            routers = [self.api.get_by_id_or_name('routers', r)
+                       for r in args.idents]
+        else:
+            routers = self.api.get_pager('routers')
+        for x in routers:
+            if not args.force and \
+               not base.confirm("Reboot %s (%s)" % (x['name'], x['id']),
+                                exit=False):
+                continue
+            print("Rebooting: %s (%s)" % (x['name'], x['id']))
+            self.api.put('remote', '/control/system/reboot', 1, id=x['id'])
 
 
 class Routers(base.ECMCommand):
@@ -375,5 +394,6 @@ class Routers(base.ECMCommand):
         self.add_subcommand(GroupUnassign)
         self.add_subcommand(Delete)
         self.add_subcommand(Clients)
+        self.add_subcommand(Reboot)
 
 command_classes = [Routers]

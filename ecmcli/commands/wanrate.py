@@ -14,8 +14,7 @@ class WanRate(base.ECMCommand):
     sample_delay = 1
 
     def setup_args(self, parser):
-        self.add_argument('idents', metavar='ROUTER_ID_OR_NAME', nargs='+',
-                          complete=self.make_completer('routers', 'name'))
+        self.add_router_argument('idents', nargs='+')
         self.add_argument('-s', '--sampletime',
                           help='How long to wait between sample captures '
                           'in seconds', type=float,
@@ -39,7 +38,7 @@ class WanRate(base.ECMCommand):
                     if x['data'] > 1024:
                         value = humanize.naturalsize(x['data'], gnu=True, format='%.1f ') + 'bps'
                     else:
-                        value = x['data'] + ' bps'
+                        value = '%s bps' % x['data']
                     value = value.lower()
                 else:
                     value = '[%s]' % x['reason']

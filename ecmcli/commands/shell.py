@@ -26,8 +26,7 @@ class Shell(base.ECMCommand):
     raw_out = sys.stdout.buffer.raw
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ROUTER_ID_OR_NAME',
-                          complete=self.routers_complete)
+        self.add_router_argument()
         self.add_argument('-n', '--new', action='store_true',
                           help='Start a new session')
 
@@ -39,13 +38,6 @@ class Shell(base.ECMCommand):
                     self.api.session_id
         with self.setup_tty():
             self.session(router, sessionid)
-
-    def routers_complete(self, startswith):
-        filters = {}
-        if startswith:
-            filters['name__startswith'] = startswith
-        routers = self.api.get_pager('routers', fields='name', **filters)
-        return [x['name'] for x in routers]
 
     @contextlib.contextmanager
     def setup_tty(self):

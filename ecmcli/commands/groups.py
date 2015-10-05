@@ -2,6 +2,7 @@
 Manage ECM Groups.
 """
 
+import shellish
 from . import base
 
 
@@ -28,8 +29,8 @@ class Printer(object):
         super().prerun(args)
 
     def bundle_group(self, group):
-        group['target'] = '%s (%s)' % (group['product']['name'],
-                                       group['target_firmware']['version'])
+        group['product'] = group['product']['name']
+        group['firmware'] = group['target_firmware']['version']
         if not isinstance(group['settings_bindings'], str):
             group['settings'] = dict((x['setting']['name'] + ':', x['value'])
                                      for x in group['settings_bindings']
@@ -51,7 +52,8 @@ class Printer(object):
             print('Name:         ', group['name'])
             print('Online:       ', group['online'])
             print('Total:        ', group['total'])
-            print('Target:       ', group['target'])
+            print('Product:      ', group['product'])
+            print('Firmware:     ', group['firmware'])
             print('Account:      ', group['account']['name'])
             print('Suspended:    ', group['statistics']['suspended_count'])
             print('Synchronized: ', group['statistics']['synched_count'])
@@ -66,15 +68,15 @@ class Printer(object):
             ("name", 'Name'),
             ("id", 'ID'),
             ("account_name", 'Account'),
-            ("target", 'Target'),
+            ("product", 'Product'),
+            ("firmware", 'Firmware'),
             ("online", 'Online'),
             ("offline", 'Offline'),
             ("total", 'Total'),
         )
-        rows = [[x[1] for x in fields]]
-        rows.extend([x[f[0]] for f in fields]
-                    for x in map(self.bundle_group, groups))
-        self.tabulate(rows)
+        table = shellish.Table(headers=[x[1] for x in fields],
+                               accessors=[x[0] for x in fields])
+        table.print(map(self.bundle_group, groups))
 
 
 class Show(Printer, base.ECMCommand):
@@ -83,8 +85,7 @@ class Show(Printer, base.ECMCommand):
     name = 'show'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='?',
-                          complete=self.make_completer('groups', 'name'))
+        self.add_group_argument(nargs='?')
         super().setup_args(parser)
 
     def run(self, args):
@@ -105,8 +106,8 @@ class Create(base.ECMCommand):
 
     def setup_args(self, parser):
         self.add_argument('--name')
-        self.add_argument('--product')
-        self.add_argument('--firmware')
+        self.add_product_argument('--product')
+        self.add_firmware_argument('--firmware')
 
     def run(self, args):
         name = args.name or input('Name: ')
@@ -153,10 +154,9 @@ class Edit(base.ECMCommand):
     name = 'edit'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='GROUP_ID_OR_NAME',
-                          complete=self.make_completer('groups', 'name'))
+        self.add_group_argument()
         self.add_argument('--name')
-        self.add_argument('--firmware', help='Eg. 5.4.1')
+        self.add_firmware_argument('--firmware')
 
     def run(self, args):
         group = self.api.get_by_id_or_name('groups', args.ident)
@@ -175,12 +175,11 @@ class Delete(base.ECMCommand):
     name = 'delete'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='GROUP_ID_OR_NAME', nargs='+',
-                          complete=self.make_completer('groups', 'name'))
+        self.add_group_argument('idents', nargs='+')
         self.add_argument('-f', '--force', action="store_true")
 
     def run(self, args):
-        for ident in args.ident:
+        for ident in args.idents:
             group = self.api.get_by_id_or_name('groups', ident)
             if not args.force and \
                not base.confirm('Delete group: %s' % group['name'],
@@ -195,9 +194,8 @@ class Move(base.ECMCommand):
     name = 'move'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='GROUP_ID_OR_NAME',
-                          complete=self.make_completer('groups', 'name'))
-        self.add_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
+        self.add_group_argument()
+        self.add_account_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
         self.add_argument('-f', '--force', action="store_true")
 
     def run(self, args):
@@ -217,8 +215,7 @@ class Search(Printer, base.ECMCommand):
     def setup_args(self, parser):
         searcher = self.make_searcher('groups', self.fields)
         self.lookup = searcher.lookup
-        self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+',
-                          help=searcher.help, complete=searcher.completer)
+        self.add_search_argument(searcher)
         super().setup_args(parser)
 
     def run(self, args):

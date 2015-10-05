@@ -12,12 +12,11 @@ from .commands import base
 command_modules = [
     'accounts',
     'alerts',
-    'config',
     'flashleds',
     'gpio',
     'groups',
     'logs',
-    'reboot',
+    'remote',
     'routers',
     'settings',
     'shell',

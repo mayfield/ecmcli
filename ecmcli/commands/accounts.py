@@ -30,7 +30,6 @@ class Formatter(object):
     expands = [
         'groups',
         'customer',
-        'settings_bindings.setting'
     ]
 
     def setup_args(self, parser):
@@ -45,19 +44,18 @@ class Formatter(object):
         else:
             self.formatter = self.terse_formatter
             self.table_fields = self.terse_table_fields
-        self.table = layout.Table(headers=[x[1] for x in self.table_fields])
+        self.table = layout.Table(headers=[x[1] for x in self.table_fields],
+                                  accessors=[self.safe_get(x[0], '')
+                                             for x in self.table_fields])
         super().prerun(args)
 
-    def safe_get(self, func, arg, default=None):
-        try:
-            return func(arg)
-        except:
-            return default
-
-    def table_render(self, accounts):
-        self.table.print([[self.safe_get(xx[0], x, '')
-                           for xx in self.table_fields]
-                          for x in map(self.bundle, accounts)])
+    def safe_get(self, func, default=None):
+        def fn(x):
+            try:
+                return func(x)
+            except:
+                return default
+        return fn
 
     def bundle(self, account):
         if self.verbose:
@@ -83,8 +81,7 @@ class Tree(Formatter, base.ECMCommand):
     name = 'tree'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME', nargs='?',
-                          complete=self.make_completer('accounts', 'name'))
+        self.add_account_argument(nargs='?')
         super().setup_args(parser)
 
     def run(self, args):
@@ -118,7 +115,8 @@ class Tree(Formatter, base.ECMCommand):
             root_ref = [root_ref['node']]
         formatter = lambda x: self.formatter(self.bundle(x.value))
         t = layout.Tree(formatter=formatter, sort_key=lambda x: x.value['id'])
-        t.render(root_ref)
+        for x in t.render(root_ref):
+            print(x)
 
 
 class Show(Formatter, base.ECMCommand):
@@ -127,18 +125,18 @@ class Show(Formatter, base.ECMCommand):
     name = 'show'
 
     def setup_args(self, parser):
-        self.add_argument('idents', metavar='ACCOUNT_ID_OR_NAME', nargs='*',
-                          complete=self.make_completer('accounts', 'name'))
+        self.add_account_argument('idents', nargs='*')
         super().setup_args(parser)
 
     def run(self, args):
         expands = ','.join(self.expands)
         if args.idents:
-            accounts = [self.api.get_by_id_or_name('accounts', x, expand=expands)
+            accounts = [self.api.get_by_id_or_name('accounts', x,
+                                                   expand=expands)
                         for x in args.idents]
         else:
             accounts = self.api.get_pager('accounts', expand=expands)
-        self.table_render(accounts)
+        self.table.print(map(self.bundle, accounts))
 
 
 class Create(base.ECMCommand):
@@ -147,9 +145,8 @@ class Create(base.ECMCommand):
     name = 'create'
 
     def setup_args(self, parser):
-        self.add_argument('-p', '--parent',
-                          metavar="PARENT_ACCOUNT_ID_OR_NAME",
-                          complete=self.make_completer('accounts', 'name'))
+        self.add_account_argument('-p', '--parent',
+                                  metavar="PARENT_ACCOUNT_ID_OR_NAME")
         self.add_argument('name', metavar='NAME')
 
     def run(self, args):
@@ -170,8 +167,7 @@ class Delete(base.ECMCommand):
     name = 'delete'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME',
-                          complete=self.make_completer('accounts', 'name'))
+        self.add_account_argument()
         self.add_argument('-f', '--force', action='store_true')
 
     def run(self, args):
@@ -188,10 +184,9 @@ class Move(base.ECMCommand):
     name = 'move'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME',
-                          complete=self.make_completer('accounts', 'name'))
-        self.add_argument('new_parent', metavar='NEW_PARENT_ID_OR_NAME',
-                          complete=self.make_completer('accounts', 'name'))
+        self.add_account_argument()
+        self.add_account_argument('new_parent',
+                                  metavar='NEW_PARENT_ID_OR_NAME')
 
     def run(self, args):
         account = self.api.get_by_id_or_name('accounts', args.ident)
@@ -206,8 +201,7 @@ class Rename(base.ECMCommand):
     name = 'rename'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ACCOUNT_ID_OR_NAME',
-                          complete=self.make_completer('accounts', 'name'))
+        self.add_account_argument()
         self.add_argument('new_name', metavar='NEW_NAME')
 
     def run(self, args):
@@ -224,15 +218,14 @@ class Search(Formatter, base.ECMCommand):
         expands = ','.join(self.expands)
         searcher = self.make_searcher('accounts', ['name'], expand=expands)
         self.lookup = searcher.lookup
-        self.add_argument('search', metavar='SEARCH_CRITERIA', nargs='+',
-                          help=searcher.help, complete=searcher.completer)
+        self.add_search_argument(searcher)
         super().setup_args(parser)
 
     def run(self, args):
         results = list(self.lookup(args.search))
         if not results:
             raise SystemExit("No results for: %s" % ' '.join(args.search))
-        self.table_render(results)
+        self.table.print(map(self.bundle, results))
 
 
 class Accounts(base.ECMCommand):

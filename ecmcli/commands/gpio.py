@@ -34,7 +34,8 @@ class GPIO(base.ECMCommand):
     def setup_args(self, parser):
         self.add_argument('ident', metavar='ROUTER_ID_OR_NAME',
                           complete=self.make_completer('routers', 'name'))
-        self.add_argument('-v', '--value', type=int, metavar="GPIO_VALUE", default=None)
+        self.add_argument('-v', '--value', type=int, metavar="GPIO_VALUE",
+                          default=None)
 
     def human_status(self, status):
         return 'OFF (0)' if status == 0 else 'ON (1)'
