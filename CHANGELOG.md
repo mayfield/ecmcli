@@ -1,7 +1,11 @@
 # Change Log
 
-
 ## [Unreleased] - unreleased
+
+
+## [2.4.9] - 2015-10-08
+### Added
+- Beta testing `remote` command to serve as replacement for `config` and `gpio`.
 
 
 ## [2.4.0] - 2015-10-02
@@ -49,7 +53,8 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v2.4.0...HEAD
+[unreleased]: https://github.com/mayfield/ecmcli/compare/v2.4.9...HEAD
+[2.4.9]: https://github.com/mayfield/ecmcli/compare/v2.4.0...v2.4.9
 [2.4.0]: https://github.com/mayfield/ecmcli/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/mayfield/ecmcli/compare/v2.1.0...v2.3.0
 [2.1.0]: https://github.com/mayfield/ecmcli/compare/v2.0.0...v2.1.0
