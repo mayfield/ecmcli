@@ -27,7 +27,7 @@ setup(
     test_suite='test',
     install_requires=[
         'syndicate==1.2.0',
-        'shellish==0.8.0',
+        'shellish==0.9.0',
         'humanize'
     ],
     entry_points = {

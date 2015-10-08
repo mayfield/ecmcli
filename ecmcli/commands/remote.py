@@ -3,45 +3,27 @@ Get and set configs for routers and groups.
 """
 
 import argparse
-import functools
 import itertools
 import json
 import shellish
-import time
 from . import base
 
 
-def walk_config(key, config):
-    if key is None:
-        return config
-    offt = config
-    for x in key.split('.'):
-        try:
-            offt = offt[x]
-        except KeyError:
-            return None
-        except TypeError:
-            if x.isnumeric():
-                try:
-                    offt = offt[int(x)]
-                except IndexError:
-                    return None
-            else:
-                return None
-    return offt
-
-
-def todict(obj):
+def todict(obj, str_array_keys=False):
     """ On a tree of list and dict types convert the lists to dict types. """
     if isinstance(obj, list):
-        return dict((k, todict(v)) for k, v in zip(itertools.count(), obj))
+        key_conv = str if str_array_keys else lambda x: x
+        return dict((key_conv(k), todict(v, str_array_keys))
+                    for k, v in zip(itertools.count(), obj))
     elif isinstance(obj, dict):
-        obj = dict((k, todict(v)) for k, v in obj.items())
+        obj = dict((k, todict(v, str_array_keys)) for k, v in obj.items())
     return obj
 
 
 class DeviceSelectorsMixin(object):
     """ Add arguments used for selecting devices. """
+
+    completer_cache = {}
 
     def setup_args(self, parser):
         self.add_argument('--disjunction', '--or', action='store_true',
@@ -55,31 +37,32 @@ class DeviceSelectorsMixin(object):
         self.add_firmware_argument('--firmware')
         super().setup_args(parser)
 
-    def get_selection(self, args_namespace, **pager_filters):
-        """ Return the routers matched by our selection criteria.  Note that
+    @shellish.ttl_cache(300)
+    def api_res_lookup(self, *args, **kwargs):
+        """ Cached wrapper around get_by_id_or_name. """
+        return self.api.get_by_id_or_name(*args, required=False, **kwargs)
+
+    def gen_selection_filters(self, args_namespace):
+        """ Return the api filters for the selection criteria.  Note that
         the group selection is only used to get a list of devices. """
         args = vars(args_namespace)
         filters = {}
         if args.get('group'):
-            hit = self.api.get_by_id_or_name('groups', args['group'],
-                                             product__series=3,
-                                             required=False)
+            hit = self.api_res_lookup('groups', args['group'],
+                                      product__series=3)
             if hit:
                 filters['group'] = hit['id']
         if args.get('router'):
-            hit = self.api.get_by_id_or_name('routers', args['router'],
-                                             product__series=3,
-                                             state='online', required=False)
+            hit = self.api_res_lookup('routers', args['router'],
+                                      product__series=3, state='online')
             if hit:
                 filters['id'] = hit['id']
         if args.get('account'):
-            hit = self.api.get_by_id_or_name('accounts', args['account'],
-                                             required=False)
+            hit = self.api_res_lookup('accounts', args['account'])
             if hit:
                 filters['account'] = hit['id']
         if args.get('product'):
-            hit = self.api.get_by_id_or_name('products', args['product'],
-                                             series=3, required=False)
+            hit = self.api_res_lookup('products', args['product'], series=3)
             if hit:
                 filters['product'] = hit['id']
         if args.get('firmware'):
@@ -88,8 +71,7 @@ class DeviceSelectorsMixin(object):
             filters = dict(_or='|'.join('%s=%s' % x for x in filters.items()))
         if args.get('skip_offline'):
             filters['state'] = 'online'
-        filters.update(pager_filters)
-        return self.api.get_pager('routers', product__series=3, **filters)
+        return filters
 
     def remote(self, path, routers, **query):
         routermap = dict((x['id'], x) for x in routers)
@@ -101,6 +83,50 @@ class DeviceSelectorsMixin(object):
             if x['success']:
                 x['dict'] = todict(x['data'])
             yield x
+
+    @shellish.ttl_cache(300)
+    def completion_router_elect(self, **filters):
+        """ Cached lookup of a router meeting the filters criteria to be used
+        for completion lookups. """
+        filters.update({
+            'state': 'online',
+            'product__series': 3,
+            'limit': 1,
+            'fields': 'id'
+        })
+        r = self.api.get('routers', **filters)
+        return r and r[0]['id']
+
+    def try_complete_path(self, prefix, args=None):
+        filters = self.gen_selection_filters(args)
+        rid = self.completion_router_elect(**filters)
+        if not rid:
+            return set(('[NO ONLINE MATCHING ROUTERS FOUND]', ' '))
+        parts = prefix.split('.')
+        if len(parts) > 1:
+            path = parts[:-1]
+            prefix = parts[-1]
+        else:
+            path = []
+        cs = self.remote_lookup((rid,) + tuple(path))
+        if not cs:
+            return set()
+        else:
+            options = dict((str(k), v) for k, v in cs.items()
+                           if str(k).startswith(prefix))
+            if len(options) == 1:
+                key, value = list(options.items())[0]
+                if isinstance(value, dict):
+                    options[key + '.'] = None # Prevent trailing space.
+            return set('.'.join(path + [x]) for x in options)
+
+    @shellish.hone_cache(maxage=3600, refineby='container')
+    def remote_lookup(self, rid_and_path):
+        rid = rid_and_path[0]
+        path = rid_and_path[1:]
+        resp = self.api.get('remote', *path, id=rid)
+        if resp and resp[0]['success'] and 'data' in resp[0]:
+            return todict(resp[0]['data'], str_array_keys=True)
 
 
 class Get(DeviceSelectorsMixin, base.ECMCommand):
@@ -122,39 +148,9 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         self.add_argument('--output-file', '-o', type=argparse.FileType('w'),
                           metavar="OUTPUT_FILE")
 
-    def try_complete_path(self, prefix, args=None):
-        for x in self.get_selection(args, state='online', page_size=1):
-            if x['state'] == 'online':
-                rid = x['id']
-                break
-        else:
-            return set(('[NO ONLINE ROUTERS FOUND]', ' '))
-        parts = prefix.split('.')
-        if len(parts) > 1:
-            path = parts[:-1]
-            prefix = parts[-1]
-        else:
-            path = []
-        cs = self.cached_remote_single(tuple(path), rid)
-        if not cs:
-            return set()
-        else:
-            options = dict((str(k), v) for k, v in cs.items()
-                           if str(k).startswith(prefix))
-            if len(options) == 1:
-                key, value = list(options.items())[0]
-                if isinstance(value, dict):
-                    options[key + '.'] = None # Prevent trailing space.
-            return set('.'.join(path + [x]) for x in options)
-
-    @functools.lru_cache()
-    def cached_remote_single(self, path, rid):
-        resp = self.api.get('remote', *path, id=rid)
-        if resp and resp[0]['success'] and 'data' in resp[0]:
-            return todict(resp[0]['data'])
-
     def run(self, args):
-        routers = self.get_selection(args)
+        filters = self.gen_selection_filters(args)
+        routers = self.api.get_pager('routers', **filters)
         formatter = {
             'json': self.json_format,
             'xml': self.xml_format,
@@ -180,7 +176,9 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                         resp = self.tree(dict(VALUE=x['dict']), render_only=True)
                 else:
                     failed.append(x)
-                    resp = ['ERROR: <b>%s</b>' % x['reason']]
+                    error = x.get('message', x.get('reason',
+                                                   x.get('exception')))
+                    resp = ['ERROR: <b>%s</b>' % error]
                 feeds = [
                     [x['router']['name']],
                     [x['router']['id']],

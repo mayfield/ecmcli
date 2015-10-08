@@ -36,11 +36,15 @@ class ECMCommand(shellish.Command):
         returns a list of .field values.  The function returned takes
         one argument to filter by an optional 'startswith' criteria. """
 
-        def fn(startswith, args):
+        @shellish.hone_cache(maxage=60)
+        def cached(startswith):
             return self.api_complete(resource, field, startswith)
 
-        fn.__name__ = '<completer for %s:%s>' % (resource, field)
-        return fn
+        def wrap(startswith, args):
+            return cached(startswith)
+
+        wrap.__name__ = '<completer for %s:%s>' % (resource, field)
+        return wrap
 
     def api_search(self, resource, fields, terms, match='icontains',
                    **options):
