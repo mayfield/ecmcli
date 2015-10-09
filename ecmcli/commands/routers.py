@@ -101,6 +101,7 @@ class Printer(object):
             return group['name']
 
     def terse_printer(self, routers):
+
         fields = (
             ("name", "Name"),
             ("id", "ID"),
@@ -109,11 +110,19 @@ class Printer(object):
             ("account_name", "Account"),
             ("group_name", "Group"),
             ("ip_address", "IP Address"),
-            ("state", "Conn")
+            (lambda x: self.colorize_conn_state(x['state']), "Conn")
         )
         table = shellish.Table(headers=[x[1] for x in fields],
                                accessors=[x[0]for x in fields])
         table.print(map(self.bundle_router, routers))
+
+    def colorize_conn_state(self, state):
+        colormap = {
+            "online": 'green',
+            "offline": 'red'
+        }
+        color = colormap.get(state, 'yellow')
+        return '<%s>%s</%s>' % (color, state, color)
 
     def bundle_router(self, router):
         router['account_name'] = router['account']['name']

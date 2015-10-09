@@ -1,5 +1,5 @@
 """
-Get and set configs for routers and groups.
+Get and set remote values on series 3 routers.
 """
 
 import argparse
@@ -31,7 +31,7 @@ class DeviceSelectorsMixin(object):
         self.add_argument('--skip-offline', action='store_true',
                           help='Ignore devices that are offline.')
         self.add_group_argument('--group')
-        self.add_router_argument('--router')
+        self.add_router_argument('--routers', nargs="+")
         self.add_account_argument('--account')
         self.add_product_argument('--product')
         self.add_firmware_argument('--firmware')
@@ -52,8 +52,8 @@ class DeviceSelectorsMixin(object):
                                       product__series=3)
             if hit:
                 filters['group'] = hit['id']
-        if args.get('router'):
-            hit = self.api_res_lookup('routers', args['router'],
+        if args.get('routers'):
+            hit = self.api_res_lookup('routers', args['routers'],
                                       product__series=3, state='online')
             if hit:
                 filters['id'] = hit['id']
@@ -263,8 +263,56 @@ class ConfigDefinition(base.ECMCommand):
         print(dtd)
 
 
+class Diff(base.ECMCommand):
+    """ Produce an N-way diff of a particular config-store path between any
+    selection of routers. """
+
+    name = 'dtd'
+
+    def setup_args(self, parser):
+        super().setup_args(parser)
+        self.add_product_argument('--product', default="MBR1400")
+        self.add_firmware_argument('--firmware', default="5.4.1")
+        self.add_argument('path', complete=self.complete_dtd_path)
+
+    def complete_dtd_path(self, prefix, args=None):
+        return set('wan', 'lan', 'system', 'firewall')
+
+    def run(self, args):
+        filters = {
+            "product.name": args.product,
+            "firmware.version": args.firmware
+        }
+        firmwares = self.api.get('firmwares', **filters)
+        if not firmwares:
+            raise SystemExit("Firmware not found: %s v%s" % (args.product,
+                             args.firmware))
+        dtd = self.api.get(urn=firmwares[0]['dtd'])
+        print(dtd)
+
+
 class Remote(base.ECMCommand):
-    """ Interact with remote router's config stores. """
+    """ Remote control live routers.
+
+    The remote interface gives direct access to online routers.  Generally
+    this provides the ability to view status and configuration as well as set
+    configuration and activate certain router control features.  All the
+    commands operate under the pretense of a router being online and connected
+    to ECM.
+
+    The endpoint of these remote calls is one or more Cradlepoint series 3
+    routers.  More specifically it is to the config-store of these routers.
+    The config-store is the information hub for everything the router exposes
+    publicly.  It provides access to real-time status, logs, and current state
+    as well as read/write access to the non-volatile configuration.  There is
+    also a control tree to instruct the router to perform various actions such
+    as rebooting, doing a traceroute or even  pulling GPIO pins up and down.
+
+    <u><b>DISCLAIMER: All the actions performed with this command are done
+    optimistically and without regard to firmware versions.  It is an
+    exercise for the reader to understand the affects of these commands as
+    well as the applicability of any input values provided.</b></u>
+    """
 
     name = 'remote'
 
@@ -273,5 +321,6 @@ class Remote(base.ECMCommand):
         self.add_subcommand(Get, default=True)
         self.add_subcommand(Set)
         self.add_subcommand(ConfigDefinition)
+        self.add_subcommand(Diff)
 
 command_classes = [Remote]
