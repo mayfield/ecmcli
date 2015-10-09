@@ -188,7 +188,7 @@ class DeviceSelectorsMixin(object):
         if len(options) == 1:
             key, value = list(options.items())[0]
             if isinstance(value, dict):
-                options[key + '.'] = None # Prevent trailing space.
+                options[key + '.'] = None  # Prevent trailing space.
         return set('.'.join(path + [x]) for x in options)
 
     @shellish.hone_cache(maxage=3600, refineby='container')
@@ -237,23 +237,26 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         failed = []
         title = 'Remote data for: %s' % args.path
         table = shellish.Table(title=title, headers=headers)
+
         def cook():
             for x in results_gen:
                 if x['success']:
                     worked.append(x)
                     if not isinstance(x['dict'], dict):
-                        resp = ['VALUE: <b>%s</b>' % x['dict']]
+                        resp = ['<b>%s</b>' % x['dict']]
                     else:
-                        resp = self.tree(dict(VALUE=x['dict']), render_only=True)
+                        resp = self.tree({"<data>": x['dict']},
+                                         render_only=True)
                 else:
                     failed.append(x)
                     error = x.get('message', x.get('reason',
                                                    x.get('exception')))
-                    resp = ['ERROR: <b>%s</b>' % error]
+                    resp = ['<b><red>%s</red></b>' % error]
                 feeds = [
                     [x['router']['name']],
                     [x['router']['id']],
-                    ['yes' if x['success'] else 'no'],
+                    ['<green>yes</green>' if x['success'] else
+                     '<red>no</red>'],
                     resp
                 ]
                 for row in itertools.zip_longest(*feeds, fillvalue=''):
