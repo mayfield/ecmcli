@@ -4,12 +4,64 @@ Get and set remote values on series 3 routers.
 
 import argparse
 import csv
+import datetime
 import itertools
 import json
 import shellish
 import syndicate.data
 import sys
 from . import base
+from xml.dom import minidom
+
+
+def toxml(data, root_tag='ecmcli'):
+    """ Convert python container tree to xml. """
+    dom = minidom.getDOMImplementation()
+    document = dom.createDocument(None, root_tag, None)
+    root = document.documentElement
+
+    def crawl(obj, parent):
+        try:
+            for key, value in sorted(obj.items()):
+                el = document.createElement(key)
+                parent.appendChild(el)
+                crawl(value, el)
+        except AttributeError:
+            if not isinstance(obj, str) and hasattr(obj, '__iter__'):
+                obj = list(obj)
+                for value in obj:
+                    try:
+                        array_id = value.pop('_id_')
+                    except (KeyError, AttributeError):
+                        pass
+                    else:
+                        parent.setAttribute('id', array_id)
+                    crawl(value, parent)
+                    if value is not obj[-1]:
+                        newparent = document.createElement(parent.tagName)
+                        parent.parentNode.appendChild(newparent)
+                        parent = newparent
+            elif obj is not None:
+                parent.setAttribute('type', type(obj).__name__)
+                parent.appendChild(document.createTextNode(str(obj)))
+    crawl(data, root)
+    return root
+
+
+def totuples(data):
+    """ Convert python container tree to key/value tuples. """
+
+    def crawl(obj, path):
+        try:
+            for key, value in sorted(obj.items()):
+                yield from crawl(value, path + (key,))
+        except AttributeError:
+            if not isinstance(obj, str) and hasattr(obj, '__iter__'):
+                for i, value in enumerate(obj):
+                    yield from crawl(value, path + (i,))
+            else:
+                yield '.'.join(map(str, path)), obj
+    return crawl(data, ())
 
 
 def todict(obj, str_array_keys=False):
@@ -177,13 +229,13 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
             'table': self.table_format,
             None: self.tree_format
         }[args.output]
-        formatter(args.path, self.remote(args.path, routers))
+        formatter(args, self.remote(args.path, routers))
 
-    def tree_format(self, path, results_gen):
+    def tree_format(self, args, results_gen):
         headers = ['Name', 'ID', 'Success', 'Response']
         worked = []
         failed = []
-        title = 'Remote data for: %s' % path
+        title = 'Remote data for: %s' % args.path
         table = shellish.Table(title=title, headers=headers)
         def cook():
             for x in results_gen:
@@ -212,37 +264,53 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         if failed:
             table.print_footer('Failed: %d' % len(failed))
 
-    def data_flatten(self, data):
+    def data_flatten(self, args, data):
         """ Flatten out the results a bit for a consistent data format. """
-        for result in data:
-            for x in ('desc', 'custom1', 'custom2', 'asset_id', 'ip_address',
-                      'mac', 'name', 'serial_number', 'state'):
-                result[x] = result['router'].get(x)
-            result.pop('router', None)
-            result.pop('dict', None)
-            yield result
 
-    def json_format(self, path, results_gen):
+        def responses():
+            for result in data:
+                for x in ('desc', 'custom1', 'custom2', 'asset_id', 'ip_address',
+                          'mac', 'name', 'serial_number', 'state'):
+                    result[x] = result['router'].get(x)
+                result.pop('router', None)
+                result.pop('dict', None)
+                yield result
+        args = vars(args).copy()
+        for key in list(args):
+            if key.startswith('api_') or key.startswith('command'):
+                del args[key]
+        return {
+            "time": datetime.datetime.utcnow().isoformat(),
+            "args": args,
+            "responses": responses()
+        }
+
+    def json_format(self, args, results_gen):
         jenc = syndicate.data.NormalJSONEncoder(indent=4, sort_keys=True)
-        print("[", end='')
-        first = True
-        for result in self.data_flatten(results_gen):
-            if not first:
-                print(", ", end='')
-            else:
-                first = False
-            print(jenc.encode(result), end='')
-        print("]")
+        data = self.data_flatten(args, results_gen)
+        data['responses'] = list(data['responses'])
+        print(jenc.encode(data))
 
-    def xml_format(self):
-        pass
+    def xml_format(self, args, results_gen):
+        doc = toxml(self.data_flatten(args, results_gen))
+        print("<?xml encoding='UTF-8'?>")
+        print(doc.toprettyxml(indent=' ' * 4), end='')
 
-    def csv_format(self, path, results_gen):
-        fields = ('data', 'id', 'success', 'mac', 'name', 'exception')
+    def csv_format(self, args, results_gen):
+        data = list(self.data_flatten(args, results_gen)['responses'])
+        path = args.path.strip('.')
+        tuples = [[(('response:%s.%s' % (path, xx[0])).strip('.'), xx[1])
+                   for xx in totuples(x.get('data', []))]
+                  for x in data]
+        keys = set(xx[0] for x in tuples for xx in x)
+        fields = ('id', 'success', 'mac', 'name', 'exception')
+        fields += tuple(sorted(keys))
         writer = csv.DictWriter(sys.stdout, fieldnames=fields,
                                 extrasaction='ignore')
         writer.writeheader()
-        writer.writerows(self.data_flatten(results_gen))
+        for xtuple, x in zip(tuples, data):
+            x.update(dict(xtuple))
+            writer.writerow(x)
 
     def table_format(self):
         pass
