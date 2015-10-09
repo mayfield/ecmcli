@@ -86,18 +86,21 @@ class DeviceSelectorsMixin(object):
                      ('product', 'product.name'), 'serial_number', 'state']
 
     def setup_args(self, parser):
+        sg = parser.add_argument_group('selection filters')
         self.add_argument('--disjunction', '--or', action='store_true',
-                          help="Logical OR the selection arguments.")
+                          help="Logical OR the selection arguments.",
+                          parser=sg)
         self.add_argument('--skip-offline', action='store_true',
-                          help='Ignore devices that are offline.')
-        self.add_group_argument('--group')
-        self.add_router_argument('--router')
-        self.add_account_argument('--account')
-        self.add_product_argument('--product')
-        self.add_firmware_argument('--firmware')
+                          help='Ignore devices that are offline.',
+                          parser=sg)
+        self.add_group_argument('--group', parser=sg)
+        self.add_router_argument('--router', parser=sg)
+        self.add_account_argument('--account', parser=sg)
+        self.add_product_argument('--product', parser=sg)
+        self.add_firmware_argument('--firmware', parser=sg)
         searcher = self.make_searcher('routers', self.search_fields)
         self.search_lookup = searcher.lookup
-        self.add_search_argument(searcher, '--search')
+        self.add_search_argument(searcher, '--search', nargs=1, parser=sg)
         super().setup_args(parser)
 
     @shellish.ttl_cache(300)
@@ -207,8 +210,8 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
 
     def setup_args(self, parser):
         super().setup_args(parser)
-        group = parser.add_argument_group('output options')
-        or_group = group.add_mutually_exclusive_group()
+        output_options = parser.add_argument_group('output options')
+        or_group = output_options.add_mutually_exclusive_group()
         for x in ('json', 'csv', 'xml', 'table'):
             self.add_argument('--%s' % x, dest='output', action='store_const',
                               const=x, parser=or_group)
@@ -216,27 +219,37 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                           complete=self.try_complete_path, default='',
                           help='Dot notation path to config value; Eg. '
                                'status.wan.rules.0.enabled')
-        self.add_argument('--output-file', '-o', type=argparse.FileType('w'),
-                          metavar="OUTPUT_FILE")
+        self.add_argument('--output-file', '-o', metavar="OUTPUT_FILE",
+                          parser=output_options)
 
     def run(self, args):
         filters = self.gen_selection_filters(args)
         routers = self.api.get_pager('routers', **filters)
+        if args.output is None and args.output_file:
+            ext = args.output_file.rsplit('.', 1)[-1]
+            default_format = ext
+        else:
+            default_format = 'tree'
         formatter = {
             'json': self.json_format,
             'xml': self.xml_format,
             'csv': self.csv_format,
             'table': self.table_format,
-            None: self.tree_format
-        }[args.output]
-        formatter(args, self.remote(args.path, routers))
+            'tree': self.tree_format
+        }.get(args.output or default_format)
+        outfile = args.output_file and open(args.output_file, 'w')
+        try:
+            formatter(args, self.remote(args.path, routers),
+                      file=outfile or sys.stdout)
+        finally:
+            outfile.close()
 
-    def tree_format(self, args, results_gen):
+    def tree_format(self, args, results_gen, file):
         headers = ['Name', 'ID', 'Success', 'Response']
         worked = []
         failed = []
         title = 'Remote data for: %s' % args.path
-        table = shellish.Table(title=title, headers=headers)
+        table = shellish.Table(title=title, headers=headers, file=file)
 
         def cook():
             for x in results_gen:
@@ -272,8 +285,9 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
 
         def responses():
             for result in data:
-                for x in ('desc', 'custom1', 'custom2', 'asset_id', 'ip_address',
-                          'mac', 'name', 'serial_number', 'state'):
+                for x in ('desc', 'custom1', 'custom2', 'asset_id',
+                          'ip_address', 'mac', 'name', 'serial_number',
+                          'state'):
                     result[x] = result['router'].get(x)
                 result.pop('router', None)
                 result.pop('dict', None)
@@ -288,18 +302,18 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
             "responses": responses()
         }
 
-    def json_format(self, args, results_gen):
+    def json_format(self, args, results_gen, file):
         jenc = syndicate.data.NormalJSONEncoder(indent=4, sort_keys=True)
         data = self.data_flatten(args, results_gen)
         data['responses'] = list(data['responses'])
-        print(jenc.encode(data))
+        print(jenc.encode(data), file=file)
 
-    def xml_format(self, args, results_gen):
+    def xml_format(self, args, results_gen, file):
         doc = toxml(self.data_flatten(args, results_gen))
-        print("<?xml encoding='UTF-8'?>")
-        print(doc.toprettyxml(indent=' ' * 4), end='')
+        print("<?xml encoding='UTF-8'?>", file=file)
+        print(doc.toprettyxml(indent=' ' * 4), end='', file=file)
 
-    def csv_format(self, args, results_gen):
+    def csv_format(self, args, results_gen, file):
         data = list(self.data_flatten(args, results_gen)['responses'])
         path = args.path.strip('.')
         tuples = [[(('response:%s.%s' % (path, xx[0])).strip('.'), xx[1])
@@ -308,7 +322,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         keys = set(xx[0] for x in tuples for xx in x)
         fields = ('id', 'success', 'mac', 'name', 'exception')
         fields += tuple(sorted(keys))
-        writer = csv.DictWriter(sys.stdout, fieldnames=fields,
+        writer = csv.DictWriter(file, fieldnames=fields,
                                 extrasaction='ignore')
         writer.writeheader()
         for xtuple, x in zip(tuples, data):
