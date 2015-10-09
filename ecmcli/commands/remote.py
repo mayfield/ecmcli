@@ -3,9 +3,12 @@ Get and set remote values on series 3 routers.
 """
 
 import argparse
+import csv
 import itertools
 import json
 import shellish
+import syndicate.data
+import sys
 from . import base
 
 
@@ -24,6 +27,11 @@ class DeviceSelectorsMixin(object):
     """ Add arguments used for selecting devices. """
 
     completer_cache = {}
+    search_fields = ['name', 'desc', 'mac', ('account', 'account.name'),
+                     'asset_id', 'custom1', 'custom2',
+                     ('group', 'group.name'),
+                     ('firmware', 'actual_firmware.version'), 'ip_address',
+                     ('product', 'product.name'), 'serial_number', 'state']
 
     def setup_args(self, parser):
         self.add_argument('--disjunction', '--or', action='store_true',
@@ -31,10 +39,13 @@ class DeviceSelectorsMixin(object):
         self.add_argument('--skip-offline', action='store_true',
                           help='Ignore devices that are offline.')
         self.add_group_argument('--group')
-        self.add_router_argument('--routers', nargs="+")
+        self.add_router_argument('--router')
         self.add_account_argument('--account')
         self.add_product_argument('--product')
         self.add_firmware_argument('--firmware')
+        searcher = self.make_searcher('routers', self.search_fields)
+        self.search_lookup = searcher.lookup
+        self.add_search_argument(searcher, '--search')
         super().setup_args(parser)
 
     @shellish.ttl_cache(300)
@@ -52,11 +63,6 @@ class DeviceSelectorsMixin(object):
                                       product__series=3)
             if hit:
                 filters['group'] = hit['id']
-        if args.get('routers'):
-            hit = self.api_res_lookup('routers', args['routers'],
-                                      product__series=3, state='online')
-            if hit:
-                filters['id'] = hit['id']
         if args.get('account'):
             hit = self.api_res_lookup('accounts', args['account'])
             if hit:
@@ -67,6 +73,16 @@ class DeviceSelectorsMixin(object):
                 filters['product'] = hit['id']
         if args.get('firmware'):
             filters['actual_firmware.version'] = args['firmware']
+        rids = []
+        if args.get('router'):
+            hit = self.api_res_lookup('routers', args['router'],
+                                      product__series=3)
+            if hit:
+                rids.append(hit['id'])
+        if args.get('search'):
+            rids.extend(x['id'] for x in self.search_lookup(args['search']))
+        if rids:
+            filters['id__in'] = ','.join(rids)
         if args.get('disjunction'):
             filters = dict(_or='|'.join('%s=%s' % x for x in filters.items()))
         if args.get('skip_offline'):
@@ -108,17 +124,20 @@ class DeviceSelectorsMixin(object):
             prefix = parts[-1]
         else:
             path = []
-        cs = self.remote_lookup((rid,) + tuple(path))
-        if not cs:
-            return set()
+        # Cheat for root paths to avoid huge lookup cost on naked tab.
+        if not path:
+            cs = dict.fromkeys(('config', 'status', 'control', 'state'), {})
         else:
-            options = dict((str(k), v) for k, v in cs.items()
-                           if str(k).startswith(prefix))
-            if len(options) == 1:
-                key, value = list(options.items())[0]
-                if isinstance(value, dict):
-                    options[key + '.'] = None # Prevent trailing space.
-            return set('.'.join(path + [x]) for x in options)
+            cs = self.remote_lookup((rid,) + tuple(path))
+            if not cs:
+                return set()
+        options = dict((str(k), v) for k, v in cs.items()
+                       if str(k).startswith(prefix))
+        if len(options) == 1:
+            key, value = list(options.items())[0]
+            if isinstance(value, dict):
+                options[key + '.'] = None # Prevent trailing space.
+        return set('.'.join(path + [x]) for x in options)
 
     @shellish.hone_cache(maxage=3600, refineby='container')
     def remote_lookup(self, rid_and_path):
@@ -188,17 +207,42 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                 for row in itertools.zip_longest(*feeds, fillvalue=''):
                     yield row
         table.print(cook())
-        print()
-        print('Succeeded: %d, failed: %d' % (len(worked), len(failed)))
+        if worked:
+            table.print_footer('Succeeded: %d' % len(worked))
+        if failed:
+            table.print_footer('Failed: %d' % len(failed))
 
-    def json_format(self):
-        pass
+    def data_flatten(self, data):
+        """ Flatten out the results a bit for a consistent data format. """
+        for result in data:
+            for x in ('desc', 'custom1', 'custom2', 'asset_id', 'ip_address',
+                      'mac', 'name', 'serial_number', 'state'):
+                result[x] = result['router'].get(x)
+            result.pop('router', None)
+            result.pop('dict', None)
+            yield result
+
+    def json_format(self, path, results_gen):
+        jenc = syndicate.data.NormalJSONEncoder(indent=4, sort_keys=True)
+        print("[", end='')
+        first = True
+        for result in self.data_flatten(results_gen):
+            if not first:
+                print(", ", end='')
+            else:
+                first = False
+            print(jenc.encode(result), end='')
+        print("]")
 
     def xml_format(self):
         pass
 
-    def csv_format(self):
-        pass
+    def csv_format(self, path, results_gen):
+        fields = ('data', 'id', 'success', 'mac', 'name', 'exception')
+        writer = csv.DictWriter(sys.stdout, fieldnames=fields,
+                                extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(self.data_flatten(results_gen))
 
     def table_format(self):
         pass
@@ -267,7 +311,7 @@ class Diff(base.ECMCommand):
     """ Produce an N-way diff of a particular config-store path between any
     selection of routers. """
 
-    name = 'dtd'
+    name = 'diff'
 
     def setup_args(self, parser):
         super().setup_args(parser)
