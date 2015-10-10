@@ -61,12 +61,25 @@ class ECMShell(shellish.Shell):
         self.api.add_listener('finish_request', self.on_request_finish)
 
     def on_request_start(self, args=None, kwargs=None):
-        self.last_request_start = time.perf_counter()
-        print('START REQUEST', args, kwargs)
+        t = self.last_request_start = time.perf_counter()
+        method, path = args
+        query = kwargs.copy()
+        urn = query.pop('urn', self.api.urn)
+        filters = ["%s=%s" % x for x in query.items()]
+        shellish.vtmlprint('<cyan>%.3f</cyan> - <blue>API DEBUG: %s /%s/%s?%s'
+                           % (t, method.upper(), urn.strip('/'),
+                           '/'.join(path).strip('/'), '&'.join(filters)))
 
-    def on_request_finish(self, result=None):
-        time_taken = time.perf_counter() - self.last_request_start
-        print('FINISHED REQUEST (%g seconds):' % time_taken, result)
+    def on_request_finish(self, error=None, result=None):
+        t = time.perf_counter()
+        ms = (t - self.last_request_start) * 1000
+        if error is not None:
+            shellish.vtmlprint('<cyan>%.3f</cyan> - <red>API DEBUG (%dms): <b>'
+                               'ERROR (%s)</b></red>' % (t, ms, error))
+        else:
+            shellish.vtmlprint('<cyan>%.3f</cyan> - <green>API DEBUG (%dms): '
+                               '<b>OK (len: %d)</b></green>' % (t, ms,
+                               len(result)))
 
     def do_cd(self, arg):
         cwd = self.cwd[:]

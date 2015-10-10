@@ -36,11 +36,11 @@ class ECMCommand(shellish.Command):
         returns a list of .field values.  The function returned takes
         one argument to filter by an optional 'startswith' criteria. """
 
-        @shellish.hone_cache(maxage=60)
+        @shellish.hone_cache(maxage=300)
         def cached(startswith):
             return self.api_complete(resource, field, startswith)
 
-        def wrap(startswith, args):
+        def wrap(startswith, *args):
             return cached(startswith)
 
         wrap.__name__ = '<completer for %s:%s>' % (resource, field)
@@ -83,12 +83,12 @@ class ECMCommand(shellish.Command):
         is primarily designed to meet needs of argparse arguments and tab
         completion. """
 
+        field_completers = {}
         fields = {}
         for x in field_desc:
-            if isinstance(x, tuple):
-                fields[x[0]] = x[1]
-            else:
-                fields[x] = x
+            label, field = x if isinstance(x, tuple) else (x, x)
+            fields[label] = field
+            field_completers[label] = self.make_completer(resource, field)
 
         def lookup(terms, **options):
             merged_options = search_options.copy()
@@ -100,7 +100,7 @@ class ECMCommand(shellish.Command):
             if ':' in startswith:
                 field, value = startswith.split(':', 1)
                 if field in fields:
-                    results = self.api_complete(resource, fields[field], value)
+                    results = field_completers[field](value)
                     return set('%s:%s' % (field, x) for x in results
                                if x is not None)
             if not startswith:

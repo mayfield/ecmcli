@@ -272,6 +272,16 @@ class ECMService(Eventer, syndicate.Service):
     def do(self, *args, **kwargs):
         """ Wrap some session and error handling around all API actions. """
         self.fire_event('start_request', args=args, kwargs=kwargs)
+        try:
+            result = self._do(*args, **kwargs)
+        except BaseException as e:
+            self.fire_event('finish_request', error=e)
+            raise e
+        else:
+            self.fire_event('finish_request', result=result)
+            return result
+
+    def _do(self, *args, **kwargs):
         if self.account is not None:
             kwargs['account'] = self.account
         try:
@@ -284,7 +294,6 @@ class ECMService(Eventer, syndicate.Service):
             self.reset_auth()
             result = super().do(*args, **kwargs)
         self.check_session()
-        self.fire_event('finish_request', result=result)
         return result
 
     def handle_error(self, error):
