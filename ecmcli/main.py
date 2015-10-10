@@ -12,6 +12,7 @@ from .commands import base
 command_modules = [
     'accounts',
     'alerts',
+    'firmware',
     'flashleds',
     'gpio',
     'groups',

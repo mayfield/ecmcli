@@ -229,14 +229,13 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
             ext = args.output_file.rsplit('.', 1)[-1]
             default_format = ext
         else:
-            default_format = 'tree'
+            default_format = None
         formatter = {
             'json': self.json_format,
             'xml': self.xml_format,
             'csv': self.csv_format,
             'table': self.table_format,
-            'tree': self.tree_format
-        }.get(args.output or default_format)
+        }.get(args.output or default_format) or self.tree_format
         outfile = args.output_file and open(args.output_file, 'w')
         try:
             formatter(args, self.remote(args.path, routers),
@@ -244,42 +243,6 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         finally:
             if outfile:
                 outfile.close()
-
-    def tree_format(self, args, results_gen, file):
-        headers = ['Name', 'ID', 'Success', 'Response']
-        worked = []
-        failed = []
-        title = 'Remote data for: %s' % args.path
-        table = shellish.Table(title=title, headers=headers, file=file)
-
-        def cook():
-            for x in results_gen:
-                if x['success']:
-                    worked.append(x)
-                    if not isinstance(x['dict'], dict):
-                        resp = ['<b>%s</b>' % x['dict']]
-                    else:
-                        resp = self.tree({"<data>": x['dict']},
-                                         render_only=True)
-                else:
-                    failed.append(x)
-                    error = x.get('message', x.get('reason',
-                                                   x.get('exception')))
-                    resp = ['<b><red>%s</red></b>' % error]
-                feeds = [
-                    [x['router']['name']],
-                    [x['router']['id']],
-                    ['<green>yes</green>' if x['success'] else
-                     '<red>no</red>'],
-                    resp
-                ]
-                for row in itertools.zip_longest(*feeds, fillvalue=''):
-                    yield row
-        table.print(cook())
-        if worked:
-            table.print_footer('Succeeded: %d' % len(worked))
-        if failed:
-            table.print_footer('Failed: %d' % len(failed))
 
     def data_flatten(self, args, data):
         """ Flatten out the results a bit for a consistent data format. """
@@ -302,6 +265,59 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
             "args": args,
             "responses": responses()
         }
+
+    def make_response_tree(self, resp):
+        """ Render a tree of the response data if it was successsful otherwise
+        return a formatted error response.  The return type is iterable. """
+        if resp['success']:
+            if not isinstance(resp['dict'], dict):
+                return ['<b>%s</b>' % resp['dict']]
+            else:
+                return self.tree({"<data>": resp['dict']}, render_only=True)
+        else:
+            error = resp.get('message', resp.get('reason',
+                                                 resp.get('exception')))
+            return ['<b><red>%s</red></b>' % error]
+
+    def tree_format(self, args, results_gen, file):
+        headers = ['Name', 'ID', 'Success', 'Response']
+        worked = failed = 0
+        title = 'Remote data for: %s' % args.path
+        table = shellish.Table(title=title, headers=headers, file=file)
+
+        def cook():
+            nonlocal worked, failed
+            for x in results_gen:
+                if x['success']:
+                    worked += 1
+                    status = '<green>yes</green>'
+                else:
+                    failed += 1
+                    status = '<red>no</red>'
+                feeds = [
+                    [x['router']['name']],
+                    [x['router']['id']],
+                    [status],
+                    self.make_response_tree(x)
+                ]
+                for row in itertools.zip_longest(*feeds, fillvalue=''):
+                    yield row
+        table.print(cook())
+        if worked:
+            table.print_footer('Succeeded: %d' % worked)
+        if failed:
+            table.print_footer('Failed: %d' % failed)
+
+    def table_format(self, args, results_gen, file):
+        results = list(results_gen)
+        success = lambda x: 'PASS' if x['success'] else 'FAIL'
+        headers = ['%s (%s) - %s' % (x['router']['name'], x['id'], success(x))
+                   for x in results]
+        title = 'Remote data for: %s' % args.path
+        table = shellish.Table(title=title, headers=headers, file=file)
+
+        trees = map(self.make_response_tree, results)
+        table.print(itertools.zip_longest(*trees, fillvalue=''))
 
     def json_format(self, args, results_gen, file):
         jenc = syndicate.data.NormalJSONEncoder(indent=4, sort_keys=True)
@@ -329,9 +345,6 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         for xtuple, x in zip(tuples, data):
             x.update(dict(xtuple))
             writer.writerow(x)
-
-    def table_format(self):
-        pass
 
 
 class Set(DeviceSelectorsMixin, base.ECMCommand):
