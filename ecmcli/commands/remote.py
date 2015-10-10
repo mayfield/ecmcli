@@ -242,7 +242,8 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
             formatter(args, self.remote(args.path, routers),
                       file=outfile or sys.stdout)
         finally:
-            outfile.close()
+            if outfile:
+                outfile.close()
 
     def tree_format(self, args, results_gen, file):
         headers = ['Name', 'ID', 'Success', 'Response']
