@@ -3,8 +3,10 @@ Foundation components for commands.
 """
 
 import collections
+import itertools
 import shellish
 from ecmcli import shell
+from xml.dom import minidom
 
 
 def confirm(msg, exit=True):
@@ -13,6 +15,67 @@ def confirm(msg, exit=True):
             return False
         raise SystemExit('Aborted')
     return True
+
+
+def toxml(data, root_tag='ecmcli'):
+    """ Convert python container tree to xml. """
+    dom = minidom.getDOMImplementation()
+    document = dom.createDocument(None, root_tag, None)
+    root = document.documentElement
+
+    def crawl(obj, parent):
+        try:
+            for key, value in sorted(obj.items()):
+                el = document.createElement(key)
+                parent.appendChild(el)
+                crawl(value, el)
+        except AttributeError:
+            if not isinstance(obj, str) and hasattr(obj, '__iter__'):
+                obj = list(obj)
+                for value in obj:
+                    try:
+                        array_id = value.pop('_id_')
+                    except (KeyError, AttributeError):
+                        pass
+                    else:
+                        parent.setAttribute('id', array_id)
+                    crawl(value, parent)
+                    if value is not obj[-1]:
+                        newparent = document.createElement(parent.tagName)
+                        parent.parentNode.appendChild(newparent)
+                        parent = newparent
+            elif obj is not None:
+                parent.setAttribute('type', type(obj).__name__)
+                parent.appendChild(document.createTextNode(str(obj)))
+    crawl(data, root)
+    return root
+
+
+def totuples(data):
+    """ Convert python container tree to key/value tuples. """
+
+    def crawl(obj, path):
+        try:
+            for key, value in sorted(obj.items()):
+                yield from crawl(value, path + (key,))
+        except AttributeError:
+            if not isinstance(obj, str) and hasattr(obj, '__iter__'):
+                for i, value in enumerate(obj):
+                    yield from crawl(value, path + (i,))
+            else:
+                yield '.'.join(map(str, path)), obj
+    return crawl(data, ())
+
+
+def todict(obj, str_array_keys=False):
+    """ On a tree of list and dict types convert the lists to dict types. """
+    if isinstance(obj, list):
+        key_conv = str if str_array_keys else lambda x: x
+        return dict((key_conv(k), todict(v, str_array_keys))
+                    for k, v in zip(itertools.count(), obj))
+    elif isinstance(obj, dict):
+        obj = dict((k, todict(v, str_array_keys)) for k, v in obj.items())
+    return obj
 
 
 class ECMCommand(shellish.Command):

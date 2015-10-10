@@ -2,8 +2,34 @@
 Manage ECM Groups.
 """
 
+import collections
+import difflib
+import json
 import shellish
+import sys
 from . import base
+
+
+PatchStat = collections.namedtuple('PatchStat', 'adds, removes')
+
+
+def patch_stats(patch):
+    adds, removes = patch
+    adds = list(base.totuples(adds))
+    for x in adds:
+        print(x)
+    return PatchStat(len(adds), len(removes))
+
+
+def patch_validate(patch):
+    if not isinstance(patch, list) or len(patch) != 2:
+        raise TypeError('Patch must be a 2 item list')
+    for x in patch[1]:
+        if not isinstance(x, list):
+            raise TypeError('Removals must be lists')
+    if not isinstance(patch[0], dict):
+        raise TypeError('Additions must be an dict tree')
+
 
 
 class Printer(object):
@@ -14,65 +40,68 @@ class Printer(object):
         'product',
         'account',
         'target_firmware',
-        'settings_bindings.setting',
         'configuration'
     ])
-
-    def setup_args(self, parser):
-        self.add_argument('-v', '--verbose', action='store_true')
-        super().setup_args(parser)
-
-    def prerun(self, args):
-        self.printed_header = False
-        self.printer = self.verbose_printer if args.verbose else \
-                       self.terse_printer
-        super().prerun(args)
 
     def bundle_group(self, group):
         group['product'] = group['product']['name']
         group['firmware'] = group['target_firmware']['version']
-        if not isinstance(group['settings_bindings'], str):
-            group['settings'] = dict((x['setting']['name'] + ':', x['value'])
-                                     for x in group['settings_bindings']
-                                     if not isinstance(x, str) and
-                                        x['value'] is not None)
-        else:
-            group['settings'] = {}
         stats = group['statistics']
         group['online'] = stats['online_count']
         group['offline'] = stats['offline_count']
         group['total'] = stats['device_count']
         group['account_name'] = group['account']['name']
+        group['suspended'] = stats['suspended_count']
+        group['synchronized'] = stats['synched_count']
         return group
 
-    def verbose_printer(self, groups):
-        for x in groups:
-            group = self.bundle_group(x)
-            print('ID:           ', group['id'])
-            print('Name:         ', group['name'])
-            print('Online:       ', group['online'])
-            print('Total:        ', group['total'])
-            print('Product:      ', group['product'])
-            print('Firmware:     ', group['firmware'])
-            print('Account:      ', group['account']['name'])
-            print('Suspended:    ', group['statistics']['suspended_count'])
-            print('Synchronized: ', group['statistics']['synched_count'])
-            if group['settings']:
-                print('Settings...')
-                for x in sorted(group['settings'].items()):
-                    print('  %-30s %s' % x)
-            print()
+    def ratio_format(self, actual, possible, high=0.99, med=0.90, low=0.90):
+        """ Color format output for a ratio. Bigger is better. """
+        if not possible:
+            return ''
+        pct = round((actual / possible) * 100)
+        if pct > .99:
+            color = 'green'
+        elif pct > .90:
+            color = 'yellow'
+        else:
+            color = 'red'
+        return '%s/%s (<%s>%d%%</%s>)' % (actual, possible, color, pct, color)
 
-    def terse_printer(self, groups):
+    def online_accessor(self, group):
+        """ Table accessor for online column. """
+        return self.ratio_format(group['online'], group['total'])
+
+    def sync_accessor(self, group):
+        """ Table accessor for config sync stats. """
+        suspended = group['suspended']
+        sync = group['synchronized']
+        total = group['total']
+        ret = self.ratio_format(sync, total)
+        if suspended:
+            ret += ', <red>%d suspended</red>' % suspended
+        return ret
+
+    def patch_accessor(self, group):
+        """ Table accessor for patch stats. """
+        stat = patch_stats(group['configuration'])
+        output = []
+        if stat.adds:
+            output.append('<cyan>+%d</cyan>' % stat.adds)
+        if stat.removes:
+            output.append('<magenta>-%d</magenta>' % stat.removes)
+        return '/'.join(output)
+
+    def printer(self, groups):
         fields = (
             ("name", 'Name'),
             ("id", 'ID'),
             ("account_name", 'Account'),
             ("product", 'Product'),
             ("firmware", 'Firmware'),
-            ("online", 'Online'),
-            ("offline", 'Offline'),
-            ("total", 'Total'),
+            (self.online_accessor, 'Online'),
+            (self.sync_accessor, 'Config Sync'),
+            (self.patch_accessor, 'Config Patch'),
         )
         table = shellish.Table(headers=[x[1] for x in fields],
                                accessors=[x[0] for x in fields])
@@ -146,6 +175,105 @@ class Create(base.ECMCommand):
             "product": products[product]['resource_uri'],
             "target_firmware": firmwares[fw]['resource_uri']
         })
+
+
+class Config(base.ECMCommand):
+    """ Show or alter the group configuration.
+    The configuration stored in a group consists of a patch tuple;
+    (additions, removals) respectively.  The patch format is a JSON array with
+    exactly 2 entries to match the aforementioned tuple.
+
+    Additions are a JSON object that holds a subset of a routers configuration
+    tree.  When paths, or nodes, are absent they are simply ignored.  The
+    config system will crawl the object looking for "leaf" nodes, which are
+    applied as an overlay on the device.
+
+    The actual algo for managing this layering is rather complex, so it is
+    advised that you experiment with this feature in a test environment before
+    attempting action on a production environment.
+
+    The deletions section contains lists of paths to be removed from the
+    router's config.  This is used in cases where you want to explicitly take
+    out a configuration that is on the router by default.  A common case is
+    removing one of the default LAN networks, such as the guest network.
+
+    Example patch that updates config.system.desc and has no deletions.
+
+        [{"system": {"desc": "New Value Here"}}, []]
+    """
+
+    name = 'config'
+
+    def setup_args(self, parser):
+        self.add_group_argument()
+        edit_options = parser.add_argument_group('patch options (DANGEROUS)')
+        or_group = edit_options.add_mutually_exclusive_group()
+        self.add_argument('--patch-file', parser=or_group, help='JSON patch '
+                          'file or - to read from stdin.')
+        self.add_argument('--purge', action='store_true', parser=or_group,
+                          help='Completely remove configuration.')
+        self.add_argument('--force', '-f', action='store_true',
+                          parser=edit_options, help='Do not prompt for '
+                          'confirmation.')
+        output_options = parser.add_argument_group('output options')
+        self.add_argument('--json', action='store_true',
+                          parser=output_options)
+        self.add_argument('--output-file', '-o', parser=output_options)
+
+    def run(self, args):
+        group = self.api.get_by_id_or_name('groups', args.ident,
+                                           expand='configuration')
+        if args.purge or args.patch_file:
+            return self.update(group, args)
+        else:
+            return self.show(group, args)
+
+    def update(self, group, args):
+        if args.purge:
+            if not args.force:
+                base.confirm('Confirm config purge of: %s' % group['name'])
+        elif args.patch_file:
+            with open(args.patch_file) as f:
+                patch = json.load(f)
+            patch_validate(patch)
+            oldpatch = group['configuration']
+            oldjson = json.dumps(oldpatch, indent=4, sort_keys=True)
+            newjson = json.dumps(patch, indent=4, sort_keys=True)
+            old_adds = list('='.join(map(str, x))
+                            for x in base.totuples(group['configuration'][0]))
+            new_adds = list('='.join(map(str, x))
+                            for x in base.totuples(patch[0]))
+            for line in difflib.unified_diff(oldjson.splitlines(True),
+                                             newjson.splitlines(True),
+                                             fromfile='current config',
+                                             tofile='proposed config', n=10):
+                print(line, end='')
+            for line in difflib.unified_diff(old_adds, new_adds, n=0):
+                if line[0] not in '-+':
+                    continue
+                print(line)
+            base.confirm('Confirm update of config of: %s' % group['name'])
+        else:
+            raise RuntimeError('invalid call to update')
+
+    def show(self, group, args):
+        adds, removes = group['configuration']
+        if args.output_file:
+            args.json = True
+            outfd = open(args.output_file, 'w')
+        else:
+            outfd = sys.stdout
+        if args.json:
+            print(json.dumps([adds, removes], indent=4), file=outfd)
+        else:
+            treelines = self.tree(base.todict({
+                "<additions>": adds,
+                "<removes>": removes
+            }), render_only=True)
+            for x in treelines:
+                print(x, file=outfd)
+        if outfd is not sys.stdout:
+            outfd.close()
 
 
 class Edit(base.ECMCommand):
@@ -238,5 +366,6 @@ class Groups(base.ECMCommand):
         self.add_subcommand(Delete)
         self.add_subcommand(Move)
         self.add_subcommand(Search)
+        self.add_subcommand(Config)
 
 command_classes = [Groups]

@@ -2,6 +2,13 @@
 
 ## [Unreleased] - unreleased
 
+### Added
+- Multiple output formats for remote-get command (XML, JSON, CSV, Table)
+- Firmware command.
+
+### Changed
+- Improved debug_api command to be more pretty.
+
 
 ## [2.4.9] - 2015-10-08
 ### Added

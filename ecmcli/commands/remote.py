@@ -11,68 +11,6 @@ import shellish
 import syndicate.data
 import sys
 from . import base
-from xml.dom import minidom
-
-
-def toxml(data, root_tag='ecmcli'):
-    """ Convert python container tree to xml. """
-    dom = minidom.getDOMImplementation()
-    document = dom.createDocument(None, root_tag, None)
-    root = document.documentElement
-
-    def crawl(obj, parent):
-        try:
-            for key, value in sorted(obj.items()):
-                el = document.createElement(key)
-                parent.appendChild(el)
-                crawl(value, el)
-        except AttributeError:
-            if not isinstance(obj, str) and hasattr(obj, '__iter__'):
-                obj = list(obj)
-                for value in obj:
-                    try:
-                        array_id = value.pop('_id_')
-                    except (KeyError, AttributeError):
-                        pass
-                    else:
-                        parent.setAttribute('id', array_id)
-                    crawl(value, parent)
-                    if value is not obj[-1]:
-                        newparent = document.createElement(parent.tagName)
-                        parent.parentNode.appendChild(newparent)
-                        parent = newparent
-            elif obj is not None:
-                parent.setAttribute('type', type(obj).__name__)
-                parent.appendChild(document.createTextNode(str(obj)))
-    crawl(data, root)
-    return root
-
-
-def totuples(data):
-    """ Convert python container tree to key/value tuples. """
-
-    def crawl(obj, path):
-        try:
-            for key, value in sorted(obj.items()):
-                yield from crawl(value, path + (key,))
-        except AttributeError:
-            if not isinstance(obj, str) and hasattr(obj, '__iter__'):
-                for i, value in enumerate(obj):
-                    yield from crawl(value, path + (i,))
-            else:
-                yield '.'.join(map(str, path)), obj
-    return crawl(data, ())
-
-
-def todict(obj, str_array_keys=False):
-    """ On a tree of list and dict types convert the lists to dict types. """
-    if isinstance(obj, list):
-        key_conv = str if str_array_keys else lambda x: x
-        return dict((key_conv(k), todict(v, str_array_keys))
-                    for k, v in zip(itertools.count(), obj))
-    elif isinstance(obj, dict):
-        obj = dict((k, todict(v, str_array_keys)) for k, v in obj.items())
-    return obj
 
 
 class DeviceSelectorsMixin(object):
@@ -152,7 +90,7 @@ class DeviceSelectorsMixin(object):
                                     id__in=','.join(routermap), **query):
             x['router'] = routermap[str(x['id'])]
             if x['success']:
-                x['dict'] = todict(x['data'])
+                x['dict'] = base.todict(x['data'])
             yield x
 
     @shellish.ttl_cache(300)
@@ -200,7 +138,7 @@ class DeviceSelectorsMixin(object):
         path = rid_and_path[1:]
         resp = self.api.get('remote', *path, id=rid)
         if resp and resp[0]['success'] and 'data' in resp[0]:
-            return todict(resp[0]['data'], str_array_keys=True)
+            return base.todict(resp[0]['data'], str_array_keys=True)
 
 
 class Get(DeviceSelectorsMixin, base.ECMCommand):
@@ -326,7 +264,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         print(jenc.encode(data), file=file)
 
     def xml_format(self, args, results_gen, file):
-        doc = toxml(self.data_flatten(args, results_gen))
+        doc = base.toxml(self.data_flatten(args, results_gen))
         print("<?xml encoding='UTF-8'?>", file=file)
         print(doc.toprettyxml(indent=' ' * 4), end='', file=file)
 
@@ -334,7 +272,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         data = list(self.data_flatten(args, results_gen)['responses'])
         path = args.path.strip('.')
         tuples = [[(('response:%s.%s' % (path, xx[0])).strip('.'), xx[1])
-                   for xx in totuples(x.get('data', []))]
+                   for xx in base.totuples(x.get('data', []))]
                   for x in data]
         keys = set(xx[0] for x in tuples for xx in x)
         fields = ('id', 'success', 'mac', 'name', 'exception')
