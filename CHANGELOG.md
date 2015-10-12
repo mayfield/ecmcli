@@ -4,10 +4,13 @@
 
 ### Added
 - Multiple output formats for remote-get command (XML, JSON, CSV, Table)
-- Firmware command.
+- Firmware command for status, update check and quick upgrade.
 
 ### Changed
 - Improved debug_api command to be more pretty.
+
+### Fixed
+- Command groups-edit with --firmware uses correct firmware product variant.
 
 
 ## [2.4.9] - 2015-10-08
