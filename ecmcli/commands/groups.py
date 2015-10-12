@@ -287,12 +287,14 @@ class Edit(base.ECMCommand):
         self.add_firmware_argument('--firmware')
 
     def run(self, args):
-        group = self.api.get_by_id_or_name('groups', args.ident)
+        group = self.api.get_by_id_or_name('groups', args.ident,
+                                           expand='product')
         updates = {}
         if args.name:
             updates['name'] = args.name
         if args.firmware:
-            fw = self.api.get_by(['version'], 'firmwares', args.firmware)
+            fw = self.api.get_by(['version'], 'firmwares', args.firmware,
+                                 product=group['product']['id'])
             updates['target_firmware'] = fw['resource_uri']
         self.api.put('groups', group['id'], updates)
 
