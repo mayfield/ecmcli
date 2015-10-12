@@ -122,9 +122,12 @@ class Upgrade(AvailMixin, base.ECMCommand):
                     break
             else:
                 raise SystemExit("Invalid firmware for product")
+        if tofw == fromfw:
+            raise SystemExit("Target version matches current version")
+        direction = 'down' if tofw['version'] < fromfw['version'] else 'up'
         if not args.force:
-            base.confirm('Confirm upgrade of %s "%s" from %s to %s' % (
-                         type_, ent['name'], fromfw['version'],
+            base.confirm('Confirm %sgrade of %s "%s" from %s to %s' % (
+                         direction, type_, ent['name'], fromfw['version'],
                          tofw['version']))
         self.api.put(dict(target_firmware=tofw['resource_uri']),
                      urn=ent['resource_uri'])
