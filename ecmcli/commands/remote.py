@@ -2,14 +2,16 @@
 Get and set remote values on series 3 routers.
 """
 
-import argparse
 import csv
 import datetime
+import io
 import itertools
 import json
+import math
 import shellish
 import syndicate.data
 import sys
+import time
 from . import base
 
 
@@ -80,14 +82,31 @@ class DeviceSelectorsMixin(object):
             filters = dict(_or='|'.join('%s=%s' % x for x in filters.items()))
         if args.get('skip_offline'):
             filters['state'] = 'online'
+        filters['product__series'] = 3
         return filters
+
+    def remote_pager(self, path, router_ids, page_size=None,
+                     ideal_requests=20, max_page_size=100, **query):
+        """ For now this provides a workaround for ECM's broken 'remote'
+        resource pager.  With page_size unset we try to produce page sizes
+        that keep the latency for each response down without taking forever
+        on very large selections. The target max number of requests is
+        controlled by ideal_requests. """
+        ids = list(router_ids)
+        if page_size is None:
+            ideal_page = math.ceil(len(ids) / ideal_requests)
+            page_size = min(ideal_page, max_page_size)
+        for i in range(0, len(ids), page_size):
+            for x in self.api.get('remote', path.replace('.', '/'),
+                                  id__in=','.join(ids[i:i+page_size]),
+                                  limit=page_size):
+                yield x
 
     def remote(self, path, routers, **query):
         routermap = dict((x['id'], x) for x in routers)
         if not routermap:
             return
-        for x in self.api.get_pager('remote', path.replace('.', '/'),
-                                    id__in=','.join(routermap), **query):
+        for x in self.remote_pager(path, routermap, **query):
             x['router'] = routermap[str(x['id'])]
             if x['success']:
                 x['dict'] = base.todict(x['data'])
@@ -150,36 +169,38 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         super().setup_args(parser)
         output_options = parser.add_argument_group('output options')
         or_group = output_options.add_mutually_exclusive_group()
-        for x in ('json', 'csv', 'xml', 'table'):
+        for x in ('json', 'csv', 'xml', 'table', 'tree'):
             self.add_argument('--%s' % x, dest='output', action='store_const',
                               const=x, parser=or_group)
         self.add_argument('path', metavar='REMOTE_PATH', nargs='?',
                           complete=self.try_complete_path, default='',
                           help='Dot notation path to config value; Eg. '
                                'status.wan.rules.0.enabled')
-        self.add_argument('--output-file', '-o', metavar="OUTPUT_FILE",
-                          parser=output_options)
+        self.add_file_argument('--output-file', '-o', mode='w', default='-',
+                               metavar="OUTPUT_FILE", parser=output_options)
+        self.add_argument('--repeat', type=float, metavar="SECONDS",
+                          help="Repeat the request every N seconds. Only "
+                          "appropriate for table format.")
 
     def run(self, args):
         filters = self.gen_selection_filters(args)
-        routers = self.api.get_pager('routers', **filters)
-        if args.output is None and args.output_file:
-            ext = args.output_file.rsplit('.', 1)[-1]
-            default_format = ext
-        else:
-            default_format = None
+        routers = list(self.api.get_pager('routers', **filters))
+        outfile = args.output_file
+        outformat = args.output or outfile.name.rsplit('.', 1)[-1]
+        fallback_format = self.tree_format if not args.repeat else \
+                          self.table_format
         formatter = {
             'json': self.json_format,
             'xml': self.xml_format,
             'csv': self.csv_format,
             'table': self.table_format,
-        }.get(args.output or default_format) or self.tree_format
-        outfile = args.output_file and open(args.output_file, 'w')
+            'tree': self.tree_format,
+        }.get(outformat) or fallback_format
+        feed = lambda: self.remote(args.path, routers)
         try:
-            formatter(args, self.remote(args.path, routers),
-                      file=outfile or sys.stdout)
+            formatter(args, feed, file=outfile)
         finally:
-            if outfile:
+            if outfile is not sys.stdout:
                 outfile.close()
 
     def data_flatten(self, args, data):
@@ -195,9 +216,16 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                 result.pop('dict', None)
                 yield result
         args = vars(args).copy()
-        for key in list(args):
+        for key, val in list(args.items()):
             if key.startswith('api_') or key.startswith('command'):
                 del args[key]
+            elif isinstance(val, io.IOBase):
+                args[key] = {
+                    "type": "file",
+                    "mode": val.mode,
+                    "encoding": val.encoding,
+                    "name": val.name
+                }
         return {
             "time": datetime.datetime.utcnow().isoformat(),
             "args": args,
@@ -205,7 +233,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         }
 
     def make_response_tree(self, resp):
-        """ Render a tree of the response data if it was successsful otherwise
+        """ Render a tree of the response data if it was successful otherwise
         return a formatted error response.  The return type is iterable. """
         if resp['success']:
             if not isinstance(resp['dict'], dict):
@@ -217,7 +245,9 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                                                  resp.get('exception')))
             return ['<b><red>%s</red></b>' % error]
 
-    def tree_format(self, args, results_gen, file):
+    def tree_format(self, args, results_feed, file):
+        if args.repeat:
+            raise SystemExit('Repeat mode not supported for tree format.')
         headers = ['Name', 'ID', 'Success', 'Response']
         worked = failed = 0
         title = 'Remote data for: %s' % args.path
@@ -225,7 +255,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
 
         def cook():
             nonlocal worked, failed
-            for x in results_gen:
+            for x in results_feed():
                 if x['success']:
                     worked += 1
                     status = '<green>yes</green>'
@@ -246,40 +276,69 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         if failed:
             table.print_footer('Failed: %d' % failed)
 
-    def table_format(self, args, results_gen, file):
-        results = list(results_gen)
-        success = lambda x: 'PASS' if x['success'] else 'FAIL'
-        headers = ['%s (%s) - %s' % (x['router']['name'], x['id'], success(x))
-                   for x in results]
-        title = 'Remote data for: %s' % args.path
-        table = shellish.Table(title=title, headers=headers, file=file)
+    def table_format(self, args, results_feed, file):
+        table = None
+        if not args.repeat:
+            status = lambda x: ' - %s' % ('PASS' if x['success'] else 'FAIL')
+        else:
+            status = lambda x: ''
+        while True:
+            start = time.monotonic()
+            results = list(results_feed())
+            if table is None:
+                headers = ['%s (%s)%s' % (x['router']['name'], x['id'],
+                           status(x)) for x in results]
+                order = [x['id'] for x in results]
+                title = 'Remote data for: %s' % args.path
+                table = shellish.Table(title=title, headers=headers,
+                                       file=file)
+            else:
+                # Align columns with the first requests ordering.
+                results.sort(key=lambda x: order.index(x['id']))
+            trees = map(self.make_response_tree, results)
+            table.print(itertools.zip_longest(*trees, fillvalue=''))
+            if not args.repeat:
+                break
+            else:
+                tillnext = args.repeat - (time.monotonic() - start)
+                time.sleep(max(tillnext, 0))
 
-        trees = map(self.make_response_tree, results)
-        table.print(itertools.zip_longest(*trees, fillvalue=''))
-
-    def json_format(self, args, results_gen, file):
+    def json_format(self, args, results_feed, file):
+        if args.repeat:
+            raise SystemExit('Repeat mode not supported for json format.')
         jenc = syndicate.data.NormalJSONEncoder(indent=4, sort_keys=True)
-        data = self.data_flatten(args, results_gen)
+        data = self.data_flatten(args, results_feed())
         data['responses'] = list(data['responses'])
         print(jenc.encode(data), file=file)
 
-    def xml_format(self, args, results_gen, file):
-        doc = base.toxml(self.data_flatten(args, results_gen))
+    def xml_format(self, args, results_feed, file):
+        if args.repeat:
+            raise SystemExit('Repeat mode not supported for xml format.')
+        doc = base.toxml(self.data_flatten(args, results_feed()))
         print("<?xml encoding='UTF-8'?>", file=file)
         print(doc.toprettyxml(indent=' ' * 4), end='', file=file)
 
-    def csv_format(self, args, results_gen, file):
-        data = list(self.data_flatten(args, results_gen)['responses'])
+    def csv_format(self, args, results_feed, file):
+        if args.repeat:
+            raise SystemExit('Repeat mode not supported for csv format.')
+        data = list(self.data_flatten(args, results_feed())['responses'])
         path = args.path.strip('.')
-        tuples = [[(('response:%s.%s' % (path, xx[0])).strip('.'), xx[1])
+        tuples = [[(('DATA:%s.%s' % (path, xx[0])).strip('.'), xx[1])
                    for xx in base.totuples(x.get('data', []))]
                   for x in data]
-        keys = set(xx[0] for x in tuples for xx in x)
-        fields = ('id', 'success', 'mac', 'name', 'exception')
-        fields += tuple(sorted(keys))
+        keys = sorted(set(xx[0] for x in tuples for xx in x))
+        static_fields = (
+            ('id', 'ROUTER_ID'),
+            ('mac', 'ROUTER_MAC'),
+            ('name', 'ROUTER_NAME'),
+            ('success', 'SUCCESS'),
+            ('exception', 'ERROR')
+        )
+        fields = [x[0] for x in static_fields] + keys
+        header = [x[1] for x in static_fields] + keys
         writer = csv.DictWriter(file, fieldnames=fields,
                                 extrasaction='ignore')
-        writer.writeheader()
+        writer.writerow(dict(zip(fields, header)))
         for xtuple, x in zip(tuples, data):
             x.update(dict(xtuple))
             writer.writerow(x)
@@ -295,8 +354,8 @@ class Set(DeviceSelectorsMixin, base.ECMCommand):
         in_group = parser.add_mutually_exclusive_group(required=True)
         self.add_argument('--input-data', '-d', metavar="INPUT_DATA",
                           help="JSON formated input data.", parser=in_group)
-        self.add_argument('--input-file', '-i', type=argparse.FileType('r'),
-                          metavar="INPUT_FILE", parser=in_group)
+        self.add_file_argument('--input-file', '-i', metavar="INPUT_FILE",
+                               parser=in_group)
         self.add_argument('--dry-run', '--manifest', help="Do not set a "
                           "config.  Generate a manifest of what would be "
                           "done and the potential peril if executed.")
