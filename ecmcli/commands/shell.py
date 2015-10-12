@@ -55,6 +55,7 @@ class Shell(base.ECMCommand):
             yield
         finally:
             termios.tcsetattr(stdin, termios.TCSADRAIN, ttysave)
+            fcntl.fcntl(stdin, fcntl.F_SETFL, fl)
 
     def buffered_read(self, idle_timeout=key_idle_timeout, max_timeout=None):
         buf = []
