@@ -14,29 +14,40 @@ class WanRate(base.ECMCommand):
     sample_delay = 1
 
     def setup_args(self, parser):
-        self.add_router_argument('idents', nargs='+')
+        self.add_router_argument('idents', nargs='*')
+        self.add_table_group(excludes={'json'})
         self.add_argument('-s', '--sampletime',
                           help='How long to wait between sample captures '
                           'in seconds', type=float,
                           default=self.sample_delay)
+        super().setup_args(parser)
 
     def run(self, args):
-        routers = [self.api.get_by_id_or_name('routers', x)
-                   for x in args.idents]
+        if args.idents:
+            routers = [self.api.get_by_id_or_name('routers', x)
+                       for x in args.idents]
+        else:
+            routers = list(self.api.get_pager('routers', state='online',
+                                              product__series=3))
         routers_by_id = dict((x['id'], x) for x in routers)
+        if not routers_by_id:
+            raise SystemExit("No valid routers to monitor")
         headers = ['%s (%s)' % (x['name'], x['id']) for x in routers]
-        table = self.tabulate([headers], flex=False)
+        table = self.tabulate([headers], renderer=args.table_format,
+                              flex=False)
         while True:
             start = time.time()
             # XXX: We should calculate our own bps instead of using 'bps' to
-            # ensure the resolution of our rate correlates with our sampletime.
-            data = self.api.get('remote', '/status/wan/stats/bps',
+            # ensure the resolution of our rate correlates with our
+            # sampletime.
+            data = self.api.get('remote', 'status/wan/stats/bps',
                                 id__in=','.join(routers_by_id))
             time.sleep(max(0, args.sampletime - (time.time() - start)))
             for x in data:
                 if x['success']:
                     if x['data'] > 1024:
-                        value = humanize.naturalsize(x['data'], gnu=True, format='%.1f ') + 'bps'
+                        value = humanize.naturalsize(x['data'], gnu=True,
+                                                     format='%.1f ') + 'bps'
                     else:
                         value = '%s bps' % x['data']
                     value = value.lower()

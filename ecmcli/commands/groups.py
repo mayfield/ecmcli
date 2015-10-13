@@ -16,8 +16,6 @@ PatchStat = collections.namedtuple('PatchStat', 'adds, removes')
 def patch_stats(patch):
     adds, removes = patch
     adds = list(base.totuples(adds))
-    for x in adds:
-        print(x)
     return PatchStat(len(adds), len(removes))
 
 
@@ -31,7 +29,6 @@ def patch_validate(patch):
         raise TypeError('Additions must be an dict tree')
 
 
-
 class Printer(object):
     """ Mixin for printing commands. """
 
@@ -42,6 +39,14 @@ class Printer(object):
         'target_firmware',
         'configuration'
     ])
+
+    def setup_args(self, parser):
+        self.add_table_group()
+        super().setup_args(parser)
+
+    def prerun(self, args):
+        self.table_format = args.table_format
+        super().prerun(args)
 
     def bundle_group(self, group):
         group['product'] = group['product']['name']
@@ -103,9 +108,10 @@ class Printer(object):
             (self.sync_accessor, 'Config Sync'),
             (self.patch_accessor, 'Config Patch'),
         )
-        table = shellish.Table(headers=[x[1] for x in fields],
-                               accessors=[x[0] for x in fields])
-        table.print(map(self.bundle_group, groups))
+        with shellish.Table(headers=[x[1] for x in fields],
+                            accessors=[x[0] for x in fields],
+                            renderer=self.table_format) as t:
+            t.print(map(self.bundle_group, groups))
 
 
 class Show(Printer, base.ECMCommand):
@@ -325,7 +331,8 @@ class Move(base.ECMCommand):
 
     def setup_args(self, parser):
         self.add_group_argument()
-        self.add_account_argument('new_account', metavar='NEW_ACCOUNT_ID_OR_NAME')
+        self.add_account_argument('new_account',
+                                  metavar='NEW_ACCOUNT_ID_OR_NAME')
         self.add_argument('-f', '--force', action="store_true")
 
     def run(self, args):

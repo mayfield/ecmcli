@@ -15,12 +15,6 @@ class Common(object):
         'profile.account'
     ])
 
-    def prerun(self, args):
-        self.verbose = getattr(args, 'verbose', False)
-        self.printer = self.verbose_printer if self.verbose else \
-                       self.terse_printer
-        super().prerun(args)
-
     def get_user(self, username):
         user = self.api.get('users', username=username, expand=self.expands)
         if not user:
@@ -37,25 +31,51 @@ class Common(object):
         user['name'] = '%(first_name)s %(last_name)s' % user
         user['roles'] = ', '.join(x['role']['name']
                                   for x in user['authorizations']
-                                  if x['role']['id'] != '4')
-        user['account_desc'] = '%s (%s)' % (account['name'], account['id'])
+                                  if not isinstance(x, str) and
+                                     x['role']['id'] != '4')
+        if isinstance(account, str):
+            user['account_desc'] = '(%s)' % account.split('/')[-2]
+        else:
+            user['account_desc'] = '%s (%s)' % (account['name'],
+                                                account['id'])
+        slen = user['profile']['session_length']
+        user['session'] = datetime.timedelta(seconds=slen)
         return user
 
+    def add_username_argument(self, *keys, **options):
+        if not keys:
+            keys = ('username',)
+        options.setdefault("metavar", 'USERNAME')
+        return self.add_completer_argument(*keys, resource='users',
+                                           res_field='username', **options)
+
+
+class Printer(object):
+
+    def setup_args(self, parser):
+        self.add_table_group()
+        super().setup_args(parser)
+
+    def prerun(self, args):
+        self.table_format = args.table_format
+        self.verbose = args.verbose
+        self.printer = self.verbose_printer if self.verbose else \
+                       self.terse_printer
+        super().prerun(args)
+
     def verbose_printer(self, users):
-        for x in users:
-            user = self.bundle_user(x)
-            slen = user['profile']['session_length']
-            session = datetime.timedelta(seconds=slen)
-            print('Username:       ', user['username'])
-            print('Full Name:      ', user['name'])
-            print('Account:        ', user['account_desc'])
-            print('Role(s):        ', user['roles'])
-            print('ID:             ', user['id'])
-            print('Email:          ', user['email'])
-            print('Joined:         ', user['date_joined'])
-            print('Last Login:     ', user['last_login'])
-            print('Session Length: ', session)
-            print()
+        fields = [
+            ('username', 'Username'),
+            ('name', 'Full Name'),
+            ('account_desc', 'Account'),
+            ('roles', 'Role(s)'),
+            ('id', 'ID'),
+            ('email', 'EMail'),
+            ('date_joined', 'Joined'),
+            ('last_login', 'Last Login'),
+            ('session', 'Max Session')
+        ]
+        self.print_table(fields, users)
 
     def terse_printer(self, users):
         fields = [
@@ -66,19 +86,16 @@ class Common(object):
             ('id', 'ID'),
             ('email', 'EMail')
         ]
-        table = shellish.Table(headers=[x[1] for x in fields],
-                               accessors=[x[0] for x in fields])
-        table.print(map(self.bundle_user, users))
+        self.print_table(fields, users)
 
-    def add_username_argument(self, *keys, **options):
-        if not keys:
-            keys = ('username',)
-        options.setdefault("metavar", 'USERNAME')
-        return self.add_completer_argument(*keys, resource='users',
-                                           res_field='username', **options)
+    def print_table(self, fields, users):
+        with shellish.Table(headers=[x[1] for x in fields],
+                            accessors=[x[0] for x in fields],
+                            renderer=self.table_format) as t:
+            t.print(map(self.bundle_user, users))
 
 
-class Show(Common, base.ECMCommand):
+class Show(Common, Printer, base.ECMCommand):
     """ Show user info. """
 
     name = 'show'
@@ -86,6 +103,7 @@ class Show(Common, base.ECMCommand):
     def setup_args(self, parser):
         self.add_username_argument(nargs='?')
         self.add_argument('-v', '--verbose', action='store_true')
+        super().setup_args(parser)
 
     def run(self, args, users=None):
         if users is None:
@@ -107,6 +125,7 @@ class Create(Common, base.ECMCommand):
         self.add_argument('--password')
         self.add_argument('--fullname')
         self.add_argument('--role', choices=self.role_choices)
+        super().setup_args(parser)
 
     def run(self, args):
         username = args.email or input('Email: ')
@@ -154,6 +173,7 @@ class Edit(Common, base.ECMCommand):
         self.add_argument('--email')
         self.add_argument('--fullname')
         self.add_argument('--session_length', type=int)
+        super().setup_args(parser)
 
     def run(self, args):
         user = self.get_user(args.username)
@@ -179,6 +199,7 @@ class Delete(Common, base.ECMCommand):
     def setup_args(self, parser):
         self.add_username_argument('usernames', nargs='+')
         self.add_argument('-f', '--force', action="store_true")
+        super().setup_args(parser)
 
     def run(self, args):
         for username in args.usernames:
@@ -198,6 +219,7 @@ class Move(Common, base.ECMCommand):
         self.add_username_argument()
         self.add_account_argument('new_account',
                                   metavar='NEW_ACCOUNT_ID_OR_NAME')
+        super().setup_args(parser)
 
     def run(self, args):
         user = self.get_user(args.username)
@@ -223,7 +245,7 @@ class Passwd(base.ECMCommand):
         self.api.put('users', user['id'], update)
 
 
-class Search(Common, base.ECMCommand):
+class Search(Common, Printer, base.ECMCommand):
     """ Search for users. """
 
     name = 'search'
@@ -234,7 +256,7 @@ class Search(Common, base.ECMCommand):
         searcher = self.make_searcher('users', self.fields)
         self.lookup = searcher.lookup
         self.add_search_argument(searcher)
-        self.add_argument('-v', '--verbose', action='store_true')
+        super().setup_args(parser)
 
     def run(self, args):
         results = list(self.lookup(args.search, expand=self.expands))

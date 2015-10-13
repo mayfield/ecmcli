@@ -29,6 +29,7 @@ class Printer(object):
 
     def setup_args(self, parser):
         self.add_argument('-v', '--verbose', action='store_true')
+        self.add_table_group()
         super().setup_args(parser)
 
     def since(self, dt):
@@ -73,7 +74,8 @@ class Printer(object):
                 print()
             x = self.bundle_router(x)
             t = shellish.Table(columns=[key_col_width, None],
-                               headers=['Router Name', x['name']])
+                               headers=['Router Name', x['name']],
+                               renderer=self.table_format)
             x['since'] = self.since(x['state_ts'])
             x['joined'] = self.since(x['create_ts']) + ' ago'
             x['account_info'] = '%s (%s)' % (x['account']['name'],
@@ -81,13 +83,14 @@ class Printer(object):
             loc = x.get('last_known_location')
             x['location_info'] = location_url % loc if loc else ''
             ents = x['featurebindings']
-            acc = lambda x: x['settings']['entitlement'] \
-                             ['sf_entitlements'][0]['name']
+            acc = lambda x: x['settings']['entitlement']['sf_entitlements'] \
+                             [0]['name']
             x['entitlements'] = ', '.join(map(acc, ents)) if ents else ''
             x['dashboard_url'] = 'https://cradlepointecm.com/ecm.html' \
                                  '#devices/dashboard?id=%s' % x['id']
             for key, label in sorted(fields.items(), key=lambda x: x[1]):
                 t.print_row([label, x[key]])
+            t.close()
 
     def group_name(self, group):
         """ Sometimes the group is empty or a URN if the user is not
@@ -112,9 +115,10 @@ class Printer(object):
             ("ip_address", "IP Address"),
             (lambda x: self.colorize_conn_state(x['state']), "Conn")
         )
-        table = shellish.Table(headers=[x[1] for x in fields],
-                               accessors=[x[0]for x in fields])
-        table.print(map(self.bundle_router, routers))
+        with shellish.Table(headers=[x[1] for x in fields],
+                            accessors=[x[0]for x in fields],
+                            renderer=self.table_format) as t:
+            t.print(map(self.bundle_router, routers))
 
     def colorize_conn_state(self, state):
         colormap = {
@@ -133,6 +137,7 @@ class Printer(object):
         return router
 
     def prerun(self, args):
+        self.table_format = args.table_format
         if args.verbose:
             self.expands = self.verbose_expands
             self.printer = self.verbose_printer
@@ -284,6 +289,7 @@ class Clients(base.ECMCommand):
 
     def setup_args(self, parser):
         self.add_router_argument('idents', nargs='*')
+        self.add_table_group()
         self.add_argument('-v', '--verbose', action="store_true")
 
     @property
@@ -303,7 +309,7 @@ class Clients(base.ECMCommand):
 
     def mac_lookup(self, info, idx):
         mac = int(''.join(info['mac'].split(':')[:3]), 16)
-        localadmin =  mac & 0x20000
+        localadmin = mac & 0x20000
         # This really only pertains to cradlepoint devices.
         if localadmin and mac not in self.mac_db:
             mac &= 0xffff
@@ -361,8 +367,9 @@ class Clients(base.ECMCommand):
                 lambda x: wifi_getter(x).get('rssi0', na),
                 lambda x: wifi_getter(x).get('txrate', na)
             ])
-        table = shellish.Table(headers=headers, accessors=accessors)
-        table.print(data)
+        with shellish.Table(headers=headers, accessors=accessors,
+                            renderer=args.table_format) as t:
+            t.print(data)
 
 
 class Reboot(base.ECMCommand):

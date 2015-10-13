@@ -2,8 +2,8 @@
 Manage ECM Accounts.
 """
 
+import shellish
 from . import base
-from shellish import layout
 
 
 class Formatter(object):
@@ -34,6 +34,7 @@ class Formatter(object):
 
     def setup_args(self, parser):
         self.add_argument('-v', '--verbose', action='store_true')
+        self.add_table_group()
         super().setup_args(parser)
 
     def prerun(self, args):
@@ -44,9 +45,10 @@ class Formatter(object):
         else:
             self.formatter = self.terse_formatter
             self.table_fields = self.terse_table_fields
-        self.table = layout.Table(headers=[x[1] for x in self.table_fields],
-                                  accessors=[self.safe_get(x[0], '')
-                                             for x in self.table_fields])
+        self.table = shellish.Table(headers=[x[1] for x in self.table_fields],
+                                    renderer=args.table_format,
+                                    accessors=[self.safe_get(x[0], '')
+                                               for x in self.table_fields])
         super().prerun(args)
 
     def safe_get(self, func, default=None):
@@ -99,13 +101,13 @@ class Tree(Formatter, base.ECMCommand):
         filtering client-side.  This theory is proven as of ECM 7-18-2015. """
         accounts_pager = self.api.get_pager('accounts', page_size=10000)
         accounts = dict((x['resource_uri'], x) for x in accounts_pager)
-        root_ref = root = {"node": layout.TreeNode('root')}
+        root_ref = root = {"node": shellish.TreeNode('root')}
         for uri, x in accounts.items():
             parent = accounts.get(x['account'], root)
             if 'node' not in parent:
-                parent['node'] = layout.TreeNode(parent)
+                parent['node'] = shellish.TreeNode(parent)
             if 'node' not in x:
-                x['node'] = layout.TreeNode(x)
+                x['node'] = shellish.TreeNode(x)
             parent['node'].children.append(x['node'])
             if root_id is not None and x['id'] == root_id:
                 root_ref = x
@@ -114,7 +116,8 @@ class Tree(Formatter, base.ECMCommand):
         else:
             root_ref = [root_ref['node']]
         formatter = lambda x: self.formatter(self.bundle(x.value))
-        t = layout.Tree(formatter=formatter, sort_key=lambda x: x.value['id'])
+        t = shellish.Tree(formatter=formatter,
+                          sort_key=lambda x: x.value['id'])
         for x in t.render(root_ref):
             print(x)
 
@@ -136,7 +139,8 @@ class Show(Formatter, base.ECMCommand):
                         for x in args.idents]
         else:
             accounts = self.api.get_pager('accounts', expand=expands)
-        self.table.print(map(self.bundle, accounts))
+        with self.table as t:
+            t.print(map(self.bundle, accounts))
 
 
 class Create(base.ECMCommand):
@@ -225,7 +229,8 @@ class Search(Formatter, base.ECMCommand):
         results = list(self.lookup(args.search))
         if not results:
             raise SystemExit("No results for: %s" % ' '.join(args.search))
-        self.table.print(map(self.bundle, results))
+        with self.table as t:
+            t.print(map(self.bundle, results))
 
 
 class Accounts(base.ECMCommand):

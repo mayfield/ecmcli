@@ -248,10 +248,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
     def tree_format(self, args, results_feed, file):
         if args.repeat:
             raise SystemExit('Repeat mode not supported for tree format.')
-        headers = ['Name', 'ID', 'Success', 'Response']
         worked = failed = 0
-        title = 'Remote data for: %s' % args.path
-        table = shellish.Table(title=title, headers=headers, file=file)
 
         def cook():
             nonlocal worked, failed
@@ -270,11 +267,15 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                 ]
                 for row in itertools.zip_longest(*feeds, fillvalue=''):
                     yield row
-        table.print(cook())
-        if worked:
-            table.print_footer('Succeeded: %d' % worked)
-        if failed:
-            table.print_footer('Failed: %d' % failed)
+
+        headers = ['Name', 'ID', 'Success', 'Response']
+        title = 'Remote data for: %s' % args.path
+        with shellish.Table(title=title, headers=headers, file=file) as t:
+            t.print(cook())
+            if worked:
+                t.print_footer('Succeeded: %d' % worked)
+            if failed:
+                t.print_footer('Failed: %d' % failed)
 
     def table_format(self, args, results_feed, file):
         table = None

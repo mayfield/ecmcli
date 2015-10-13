@@ -5,12 +5,14 @@
 ### Added
 - Multiple output formats for remote-get command (XML, JSON, CSV, Table)
 - Firmware command for status, update check and quick upgrade.
+- Configuration subcommands for groups.
 
 ### Changed
 - Improved debug_api command to be more pretty.
 
 ### Fixed
 - Command groups-edit with --firmware uses correct firmware product variant.
+- Fix for `BlockingIOError` after using `shell` command.
 
 
 ## [2.4.9] - 2015-10-08

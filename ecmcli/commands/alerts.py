@@ -20,8 +20,7 @@ class Alerts(base.ECMCommand):
     name = 'alerts'
 
     def setup_args(self, parser):
-        self.add_argument('-e', '--expand', action='store_true',
-                          help="Expand each alert")
+        self.add_table_group()
 
     def run(self, args):
         by_type = collections.OrderedDict()
@@ -52,6 +51,7 @@ class Alerts(base.ECMCommand):
             since(x['newest']),
             since(x['oldest'])
         ) for name, x in by_type.items())
-        self.tabulate(data)
+        t = self.tabulate(data, renderer=args.table_format)
+        t.close()
 
 command_classes = [Alerts]
