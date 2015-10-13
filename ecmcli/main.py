@@ -17,6 +17,7 @@ command_modules = [
     'gpio',
     'groups',
     'logs',
+    'messages',
     'remote',
     'routers',
     'settings',
