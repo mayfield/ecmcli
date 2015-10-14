@@ -10,6 +10,7 @@ from . import api
 from .commands import base
 
 command_modules = [
+    'authorizations',
     'accounts',
     'alerts',
     'firmware',
