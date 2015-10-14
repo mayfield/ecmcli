@@ -36,19 +36,31 @@ class List(Common, base.ECMCommand):
     expands = (
         'account',
         'role',
-        'user'
+        'user',
+        'securitytoken'
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields = collections.OrderedDict((
             ('id', 'ID'),
+            (lambda x: x.get('user.username') or '%s (%s)' % (
+                       x.get('securitytoken.label'),
+                       x.get('securitytoken.api_token_id')),
+             'Username / Security Token'),
+            (lambda x: '<b>-&gt;</b>', ''),
             ('account.name', 'Account'),
             ('cascade', 'Cascade'),
             ('role.name', 'Role'),
-            ('user.username', 'Username'),
             ('active', 'Active'),
         ))
+        self.colspec = [
+            None,
+            {"align": "right"},
+            {"align": "center"},
+            {"align": "left"},
+            None, None, None
+        ]
 
     def setup_args(self, parser):
         self.add_table_group()
@@ -59,12 +71,11 @@ class List(Common, base.ECMCommand):
     def run(self, args):
         auths = self.api.get_pager('authorizations',
                                    expand=','.join(self.expands))
-        with shellish.Table(headers=self.fields.values(),
+        with shellish.Table(columns=self.colspec,
+                            headers=self.fields.values(),
                             accessors=self.fields.keys(),
                             renderer=args.table_format) as t:
-            import pdb
-            pdb.set_trace()
-            t.print(map(dict(map(base.totuples, auths))))
+            t.print(map(dict, map(base.totuples, auths)))
 
 
 class Activate(Common, base.ECMCommand):
