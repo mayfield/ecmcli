@@ -3,12 +3,18 @@ Some API handling code.  Predominantly this is to centralize common
 alterations we make to API calls, such as filtering by router ids.
 """
 
+import collections
+import collections.abc
+import fnmatch
+import functools
 import getpass
 import hashlib
 import html
 import html.parser
 import json
 import os
+import re
+import shellish
 import shutil
 import syndicate
 import syndicate.client
@@ -27,60 +33,16 @@ class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
         return data
 
 
-class TOSParser(html.parser.HTMLParser):
-
-    end = '\033[0m'
-    tags = {
-        'b': ('\033[1m', end),
-        'h2': ('\n\033[1m', end+'\n'),
-        'h1': ('\n\033[1m', end+'\n'),
-        'ul': ('\033[4m', end),
-        'p': ('\n', '\n')
-    }
-    ignore = [
-        'style',
-        'script',
-        'head'
-    ]
-
-    def __init__(self):
-        self.fmt_stack = []
-        self.ignore_stack = []
-        self.buf = []
-        super().__init__()
-
-    def handle_starttag(self, tag, attrs):
-        if tag in self.tags:
-            start, end = self.tags[tag]
-            self.buf.append(start)
-            self.fmt_stack.append((tag, end))
-        if tag in self.ignore:
-            self.ignore_stack.append(tag)
-
-    def handle_endtag(self, tag):
-        if self.fmt_stack and tag == self.fmt_stack[-1][0]:
-            self.buf.append(self.fmt_stack.pop()[1])
-        elif self.ignore_stack and tag == self.ignore_stack[-1]:
-            self.ignore_stack.pop()
-
-    def handle_data(self, data):
-        if not self.ignore_stack:
-            self.buf.append(data.replace('\n', ' '))
-
-    def pager(self):
-        width, height = shutil.get_terminal_size()
-        data = []
-        buf = ''.join(self.buf)
-        del self.buf[:]
-        for line in buf.splitlines():
-            data.extend(textwrap.wrap(line, width-4))
-        i = 0
-        for x in data:
-            i += 1
-            if i == height - 1:
-                input("<Press enter to view next page>")
-                i = 0
-            print(x)
+def text_pager(data):
+    width, height = shutil.get_terminal_size()
+    data = textwrap.wrap(data, width-4)
+    i = 0
+    for x in data:
+        i += 1
+        if i == height - 1:
+            input("<Press enter to view next page>")
+            i = 0
+        print(x)
 
 
 syndicate.data.serializers['htmljson'] = syndicate.data.Serializer(
@@ -208,6 +170,11 @@ class ECMService(Eventer, syndicate.Service):
             'reset_auth'
         ])
 
+    @property
+    def default_page_size(self):
+        """ Dynamically change the page size to the screen height. """
+        return max(20, min(100, shutil.get_terminal_size()[1]))
+
     def connect(self, site=None, username=None, password=None):
         if site:
             self.site = site
@@ -313,12 +280,10 @@ class ECMService(Eventer, syndicate.Service):
         raise SystemExit("Error: %s" % err)
 
     def accept_tos(self):
-        tos_parser = TOSParser()
         for tos in self.get_pager('system_message', type='tos'):
-            tos_parser.feed(tos['message'])
             input("You must read and accept the terms of service to "
                   "continue: <press enter>")
-            tos_parser.pager()
+            text_pager(str(shellish.htmlrender(tos['message'])))
             print()
             accept = input('Type "accept" to comply with the TOS: ')
             if accept != 'accept':
@@ -328,14 +293,35 @@ class ECMService(Eventer, syndicate.Service):
             })
             return True
 
+    def glob_field(self, field, criteria):
+        """ Convert the criteria into an API filter and test function to
+        further refine the fetched results.  That is, the glob pattern will
+        often require client side filtering after doing a more open ended
+        server filter.  The client side test function will only be truthy
+        when a value is in full compliance.  The server filters are simply
+        to reduce high latency overhead. """
+        filters = {}
+        try:
+            start, *globs, end = re.split(r'(\[.*\]|[\*?])', criteria)
+        except ValueError:
+            filters['%s__exact' % field] = criteria
+        else:
+            if start:
+                filters['%s__startswith' % field] = start
+            if end:
+                filters['%s__endswith' % field] = end
+        return filters, lambda x: fnmatch.fnmatchcase(x.get(field), criteria)
+
     def get_by(self, selectors, resource, criteria, required=True, **options):
+        if isinstance(selectors, str):
+            selectors = [selectors]
         for field in selectors:
+            sfilters, test = self.glob_field(field, criteria)
             filters = options.copy()
-            filters[field] = criteria
-            try:
-                return self.get(resource, **filters)[0]
-            except IndexError:
-                pass
+            filters.update(sfilters)
+            for x in self.get_pager(resource, **filters):
+                if test is None or test(x):
+                    return x
         if required:
             raise SystemExit("%s not found: %s" % (resource[:-1].capitalize(),
                              criteria))
@@ -345,3 +331,59 @@ class ECMService(Eventer, syndicate.Service):
         if id_or_name.isnumeric():
             selectors.insert(0, 'id')
         return self.get_by(selectors, resource, id_or_name, **kwargs)
+
+    def glob_pager(self, *args, **kwargs):
+        """ Similar to get_pager but use glob filter patterns.  If arrays are
+        given to a filter arg it is converted to the appropriate disjunction
+        filters.  That is, if you ask for field=['foo*', 'bar*'] it will return
+        entries that start with `foo` OR `bar`.  The normal behavior would
+        produce a paradoxical query staying it had to start with both. """
+        exclude = {"expand", "limit", "timeout", "_or", "page_size", "urn",
+                   "data", "callback"}
+        iterable = lambda x: isinstance(x, collections.abc.Iterable) and \
+                             not isinstance(x, str)
+        glob_tests = []
+        glob_filters = collections.defaultdict(list)
+        for fkey, fval in list(kwargs.items()):
+            if fkey in exclude or '__' in fkey or '.' in fkey:
+                continue
+            kwargs.pop(fkey)
+            fvals = [fval] if not iterable(fval) else fval
+            gcount = 0
+            for gval in fvals:
+                gcount += 1
+                filters, test = self.glob_field(fkey, gval)
+                for query, term in filters.items():
+                    glob_filters[query].append(term)
+                if test:
+                    glob_tests.append(test)
+            # Scrub out any exclusive queries that will prevent certain client
+            # side matches from working.  Namely if one pattern can match by
+            # `startswith`, for example, but others can't we must forgo
+            # inclusion of this server side filter to prevent stripping out
+            # potentially valid responses for the other more open-ended globs.
+            for gkey, gvals in list(glob_filters.items()):
+                if len(gvals) != gcount:
+                    del glob_filters[gkey]
+        disjunctions = []
+        disjunct = kwargs.pop('_or', None)
+        if disjunct is not None:
+            if isinstance(disjunct, collections.abc.Iterable) and \
+               not isinstance(disjunct, str):
+                disjunctions.extend(disjunct)
+            else:
+                disjunctions.append(disjunct)
+        disjunctions.extend('|'.join('%s=%s' % (query, x) for x in terms)
+                            for query, terms in glob_filters.items())
+        if disjunctions:
+            kwargs['_or'] = disjunctions
+        stream = self.get_pager(*args, **kwargs)
+        if not glob_tests:
+            return stream
+        else:
+
+            def glob_scrub():
+                for x in stream:
+                    if any(t(x) for t in glob_tests):
+                        yield x
+            return glob_scrub()

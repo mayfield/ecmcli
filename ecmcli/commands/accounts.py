@@ -122,10 +122,10 @@ class Tree(Formatter, base.ECMCommand):
             print(x)
 
 
-class Show(Formatter, base.ECMCommand):
-    """ Show account info. """
+class List(Formatter, base.ECMCommand):
+    """ List accounts. """
 
-    name = 'show'
+    name = 'ls'
 
     def setup_args(self, parser):
         self.add_account_argument('idents', nargs='*')
@@ -171,15 +171,16 @@ class Delete(base.ECMCommand):
     name = 'delete'
 
     def setup_args(self, parser):
-        self.add_account_argument()
+        self.add_account_argument('idents', nargs='+')
         self.add_argument('-f', '--force', action='store_true')
 
     def run(self, args):
-        account = self.api.get_by_id_or_name('accounts', args.ident)
-        if not args.force:
-            base.confirm('Confirm account delete: %s (%s)' % (account['name'],
-                         account['id']))
-        self.api.delete('accounts', account['id'])
+        for x in args.idents:
+            account = self.api.get_by_id_or_name('accounts', x)
+            if not args.force:
+                base.confirm('Confirm account delete: %s (%s)' % (account['name'],
+                             account['id']))
+            self.api.delete('accounts', account['id'])
 
 
 class Move(base.ECMCommand):
@@ -240,7 +241,7 @@ class Accounts(base.ECMCommand):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.add_subcommand(Show, default=True)
+        self.add_subcommand(List, default=True)
         self.add_subcommand(Tree)
         self.add_subcommand(Create)
         self.add_subcommand(Delete)

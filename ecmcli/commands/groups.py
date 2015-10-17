@@ -114,10 +114,10 @@ class Printer(object):
             t.print(map(self.bundle_group, groups))
 
 
-class Show(Printer, base.ECMCommand):
-    """ Show group(s). """
+class List(Printer, base.ECMCommand):
+    """ List group(s). """
 
-    name = 'show'
+    name = 'ls'
 
     def setup_args(self, parser):
         self.add_group_argument(nargs='?')
@@ -369,7 +369,7 @@ class Groups(base.ECMCommand):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.add_subcommand(Show, default=True)
+        self.add_subcommand(List, default=True)
         self.add_subcommand(Create)
         self.add_subcommand(Edit)
         self.add_subcommand(Delete)

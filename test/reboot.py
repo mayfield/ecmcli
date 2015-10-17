@@ -17,14 +17,14 @@ class ArgSanity(unittest.TestCase):
     def test_router_single_ident_arg(self):
         self.runcmd('reboot foo -f')
         self.cmd.api.get_by_id_or_name.assert_called_with('routers', 'foo')
-        self.assertEquals(self.cmd.api.put.call_args[1]['id'], '1')
+        self.assertEqual(self.cmd.api.put.call_args[1]['id'], '1')
 
     def test_router_multi_ident_arg(self):
         self.runcmd('reboot foo bar -f')
         self.cmd.api.get_by_id_or_name.assert_any_call('routers', 'foo')
         self.cmd.api.get_by_id_or_name.assert_any_call('routers', 'bar')
-        self.assertEquals(self.cmd.api.put.call_args[1]['id'], '1')
+        self.assertEqual(self.cmd.api.put.call_args[1]['id'], '1')
 
     def test_router_no_ident_arg(self):
         self.runcmd('reboot -f')
-        self.assertEquals(self.cmd.api.put.call_args[1]['id'], '1')
+        self.assertEqual(self.cmd.api.put.call_args[1]['id'], '1')

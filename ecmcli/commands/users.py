@@ -15,11 +15,13 @@ class Common(object):
         'profile.account'
     ])
 
+    def get_users(self, *usernames):
+        return self.api.glob_pager('users', username=usernames,
+                                   expand=self.expands)
+
     def get_user(self, username):
-        user = self.api.get('users', username=username, expand=self.expands)
-        if not user:
-            raise SystemExit("Invalid username: %s" % username)
-        return user[0]
+        return self.api.get_by('username', 'users', username,
+                               expand=self.expands)
 
     def splitname(self, fullname):
         name = fullname.rsplit(' ', 1)
@@ -95,23 +97,18 @@ class Printer(object):
             t.print(map(self.bundle_user, users))
 
 
-class Show(Common, Printer, base.ECMCommand):
-    """ Show user info. """
+class List(Common, Printer, base.ECMCommand):
+    """ List users. """
 
-    name = 'show'
+    name = 'ls'
 
     def setup_args(self, parser):
-        self.add_username_argument(nargs='?')
+        self.add_username_argument('usernames', nargs='*')
         self.add_argument('-v', '--verbose', action='store_true')
         super().setup_args(parser)
 
-    def run(self, args, users=None):
-        if users is None:
-            if args.username:
-                users = [self.get_user(args.username)]
-            else:
-                users = self.api.get_pager('users', expand=self.expands)
-        self.printer(users)
+    def run(self, args):
+        self.printer(self.get_users(*args.usernames))
 
 
 class Create(Common, base.ECMCommand):
@@ -202,10 +199,10 @@ class Delete(Common, base.ECMCommand):
         super().setup_args(parser)
 
     def run(self, args):
-        for username in args.usernames:
-            user = self.get_user(username)
+        for user in self.get_users(args.usernames):
             if not args.force and \
-               not base.confirm('Delete user: %s' % username, exit=False):
+               not base.confirm('Delete user: %s' % user['username'],
+                                exit=False):
                 continue
             self.api.delete('users', user['id'])
 
@@ -222,6 +219,9 @@ class Move(Common, base.ECMCommand):
         super().setup_args(parser)
 
     def run(self, args):
+        print(args.username)
+        print(args.new_account)
+        return
         user = self.get_user(args.username)
         account = self.api.get_by_id_or_name('accounts', args.new_account)
         self.api.put('profiles', user['profile']['id'],
@@ -272,7 +272,7 @@ class Users(base.ECMCommand):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.add_subcommand(Show, default=True)
+        self.add_subcommand(List, default=True)
         self.add_subcommand(Create)
         self.add_subcommand(Delete)
         self.add_subcommand(Edit)

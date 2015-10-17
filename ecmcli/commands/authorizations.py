@@ -13,7 +13,8 @@ class Common(object):
 
     def get_messages(self):
         """ Combine system and user message streams. """
-        messages = list(self.api.get_pager('system_message', type__nexact='tos'))
+        messages = list(self.api.get_pager('system_message',
+                                           type__nexact='tos'))
         messages.extend(self.api.get_pager('user_messages'))
         messages.sort(key=lambda x: x['created'], reverse=True)
         return messages
@@ -30,52 +31,95 @@ class Common(object):
 
 
 class List(Common, base.ECMCommand):
-    """ Show authorizations. """
+    """ List authorizations. """
 
-    name = 'list'
+    name = 'ls'
     expands = (
         'account',
         'role',
-        'user',
-        'securitytoken'
+        'user.profile.account',
+        'securitytoken.account'
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields = collections.OrderedDict((
+        check = '<b>%s</b>' % shellish.beststr('✓', '*')
+        self.verbose_fields = collections.OrderedDict((
             ('id', 'ID'),
-            (lambda x: x.get('user.username') or '%s (%s)' % (
-                       x.get('securitytoken.label'),
-                       x.get('securitytoken.api_token_id')),
-             'Username / Security Token'),
-            (lambda x: '<b>-&gt;</b>', ''),
-            ('account.name', 'Account'),
-            ('cascade', 'Cascade'),
+            (self.trustee_acc, 'Beneficiary (user/token)'),
+            (self.orig_account_acc, 'Originating Account'),
             ('role.name', 'Role'),
-            ('active', 'Active'),
+            ('account.name', 'Rights on (account)'),
+            (lambda x: check if x['cascade'] else '', 'Cascades'),
+            (lambda x: check if not x['active'] else '', 'Inactive'),
         ))
-        self.colspec = [
-            None,
-            {"align": "right"},
-            {"align": "center"},
-            {"align": "left"},
-            None, None, None
-        ]
+        self.terse_fields = collections.OrderedDict((
+            (self.trustee_acc, 'Beneficiary (user/token)'),
+            ('role.name', 'Role'),
+            ('account.name', 'Rights on (account)'),
+            (lambda x: check if not x['active'] else '', 'Inactive'),
+        ))
+
+    def trustee_acc(self, row):
+        """ Show the username@account or securitytoken@account. """
+        try:
+            return row['user.username']
+        except:
+            return row['securitytoken.label']
+
+    def orig_account_acc(self, row):
+        """ Show the originating account. This is where the user/token hails
+        from. """
+        if 'user.username' in row:
+            try:
+                return row['user.profile.account.name']
+            except KeyError:
+                return '(%s)' % row['user.profile.account'].split('/')[-2]
+        else:
+            try:
+                return row['securitytoken.account.name']
+            except KeyError:
+                return '(%s)' % row['securitytoken.account'].split('/')[-2]
 
     def setup_args(self, parser):
         self.add_table_group()
         self.add_argument('--inactive', action='store_true',
                           help='Only show inactive authorizations.')
+        self.add_argument('--verbose', '-v', action='store_true')
         super().setup_args(parser)
 
     def run(self, args):
         auths = self.api.get_pager('authorizations',
                                    expand=','.join(self.expands))
-        with shellish.Table(columns=self.colspec,
-                            headers=self.fields.values(),
-                            accessors=self.fields.keys(),
+        fields = self.terse_fields if not args.verbose else self.verbose_fields
+        with shellish.Table(headers=fields.values(), accessors=fields.keys(),
                             renderer=args.table_format) as t:
             t.print(map(dict, map(base.totuples, auths)))
+
+
+class Roles(Common, base.ECMCommand):
+    """ Describe a role's permissions. """
+
+    name = 'role'
+    expands = (
+        'permissions',
+    )
+
+    def setup_args(self, parser):
+        self.add_table_group()
+        self.add_argument('roles', nargs='*',
+                          complete=self.make_completer('roles', 'name'))
+        self.add_argument('--verbose', '-v', action='store_true')
+        super().setup_args(parser)
+
+    def run(self, args):
+        auths = self.api.get_pager('roles',
+                                   expand=','.join(self.expands))
+        self.tabulate(auths)
+        #with shellish.Table(headers=self.fields.values(),
+        #                    accessors=self.fields.keys(),
+        #                    renderer=args.table_format) as t:
+        #    t.print(map(dict, map(base.totuples, auths)))
 
 
 class Activate(Common, base.ECMCommand):
@@ -86,7 +130,8 @@ class Activate(Common, base.ECMCommand):
 
     def setup_args(self, parser):
         self.add_argument('ident', metavar='ID',
-                          complete=self.complete_id)
+                          complete=self.make_completer('authorizations', 'id'))
+                          #complete=self.complete_id)
         super().setup_args(parser)
 
     @shellish.ttl_cache(60)
@@ -111,5 +156,6 @@ class Authorizations(base.ECMCommand):
         super().__init__(*args, **kwargs)
         self.add_subcommand(List, default=True)
         self.add_subcommand(Activate)
+        self.add_subcommand(Roles)
 
 command_classes = [Authorizations]

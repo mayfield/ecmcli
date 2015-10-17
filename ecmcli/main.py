@@ -10,9 +10,9 @@ from . import api
 from .commands import base
 
 command_modules = [
-    'authorizations',
     'accounts',
     'alerts',
+    'authorizations',
     'firmware',
     'flashleds',
     'gpio',
@@ -23,6 +23,7 @@ command_modules = [
     'routers',
     'settings',
     'shell',
+    'trace',
     'users',
     'wanrate'
 ]
@@ -44,6 +45,7 @@ class ECMRoot(base.ECMCommand):
         self.add_argument('--api_password')
         self.add_argument('--api_site',
                           help='E.g. https://cradlepointecm.com')
+        self.add_argument('--debug', action='store_true')
         self.add_argument('--version', action='version',
                           version=distro.version)
 
@@ -52,6 +54,12 @@ class ECMRoot(base.ECMCommand):
 
 
 def main():
+    try:
+        _main()
+    except KeyboardInterrupt:
+        sys.exit(1)
+
+def _main():
     root = ECMRoot(api=api.ECMService())
     root.add_subcommand(shellish.SystemCompletionSetup)
     for modname in command_modules:
@@ -59,9 +67,8 @@ def main():
         for Command in module.command_classes:
             root.add_subcommand(Command)
     args = root.argparser.parse_args()
-    try:
-        root.api.connect(args.api_site, username=args.api_username,
-                         password=args.api_password)
-        root(args)
-    except KeyboardInterrupt:
-        sys.exit(1)
+    if args.debug:
+        root['trace']['enable']([])
+    root.api.connect(args.api_site, username=args.api_username,
+                     password=args.api_password)
+    root(args)

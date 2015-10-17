@@ -4,7 +4,6 @@ Interactive shell for ECM.
 
 import code
 import shellish
-import time
 from . import api
 
 
@@ -54,32 +53,6 @@ class ECMShell(shellish.Shell):
     def do_debug(self, arg):
         """ Run an interactive python interpretor. """
         code.interact(None, None, self.__dict__)
-
-    def do_debug_api(self, arg):
-        """ Start logging api activity to the screen. """
-        self.api.add_listener('start_request', self.on_request_start)
-        self.api.add_listener('finish_request', self.on_request_finish)
-
-    def on_request_start(self, args=None, kwargs=None):
-        t = self.last_request_start = time.perf_counter()
-        method, path = args
-        query = kwargs.copy()
-        urn = query.pop('urn', self.api.urn)
-        filters = ["%s=%s" % x for x in query.items()]
-        shellish.vtmlprint('<cyan>%.3f</cyan> - <blue>API DEBUG: %s /%s/%s?%s'
-                           % (t, method.upper(), urn.strip('/'),
-                           '/'.join(path).strip('/'), '&'.join(filters)))
-
-    def on_request_finish(self, error=None, result=None):
-        t = time.perf_counter()
-        ms = (t - self.last_request_start) * 1000
-        if error is not None:
-            shellish.vtmlprint('<cyan>%.3f</cyan> - <red>API DEBUG (%dms): <b>'
-                               'ERROR (%s)</b></red>' % (t, ms, error))
-        else:
-            shellish.vtmlprint('<cyan>%.3f</cyan> - <green>API DEBUG (%dms): '
-                               '<b>OK (len: %d)</b></green>' % (t, ms,
-                               len(result)))
 
     def do_cd(self, arg):
         cwd = self.cwd[:]

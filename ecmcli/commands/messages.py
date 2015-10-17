@@ -44,9 +44,9 @@ class Common(object):
 
 
 class List(Common, base.ECMCommand):
-    """ Show messages. """
+    """ List messages. """
 
-    name = 'list'
+    name = 'ls'
 
     def setup_args(self, parser):
         self.add_table_group()
@@ -102,8 +102,7 @@ class Read(Common, base.ECMCommand):
         super().setup_args(parser)
 
     def format_msg(self, msg):
-        """ XXX: Obviously a dirty hack. """
-        return textwrap.fill(msg, break_long_words=False)
+        return shellish.htmlrender(msg)
 
     @shellish.ttl_cache(60)
     def cached_messages(self):
@@ -125,11 +124,15 @@ class Read(Common, base.ECMCommand):
         if res is None:
             raise SystemExit("Invalid message type: %s" % args.ident[0])
         # NOTE: system_message does not support detail get.
-        msg = self.api.get(res, id=ident[1])[0]
-        self.vtmlprint('<b>%s</b>' % msg['title'])
+        msg = self.api.get_by(['id'], res, ident[1])
+        self.vtmlprint('<b>Created: %s</b>' % msg['created'])
+        self.vtmlprint('<b>Subject: %s</b>' % msg['title'])
         if 'message' in msg:
-            print()
-            self.vtmlprint(self.format_msg(msg.get('message')))
+            output = shellish.htmlrender(msg['message'])
+            for x in str(output).split('\n'):
+                print(textwrap.fill(x.strip(), break_long_words=False,
+                                    replace_whitespace=False,
+                                    break_on_hyphens=False))
         if ident[0] == 'usr':
             self.api.put(res, ident[1], {"is_read": True})
         else:

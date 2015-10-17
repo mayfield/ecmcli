@@ -147,10 +147,10 @@ class Printer(object):
         super().prerun(args)
 
 
-class Show(Printer, base.ECMCommand):
-    """ Display routers. """
+class List(Printer, base.ECMCommand):
+    """ List routers registered with ECM. """
 
-    name = 'show'
+    name = 'ls'
 
     def setup_args(self, parser):
         self.add_router_argument(nargs='?')
@@ -403,7 +403,7 @@ class Routers(base.ECMCommand):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.add_subcommand(Show, default=True)
+        self.add_subcommand(List, default=True)
         self.add_subcommand(Search)
         self.add_subcommand(Move)
         self.add_subcommand(GroupAssign)

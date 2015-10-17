@@ -6,6 +6,9 @@
 - Multiple output formats for remote-get command (XML, JSON, CSV, Table)
 - Firmware command for status, update check and quick upgrade.
 - Configuration subcommands for groups.
+- accounts-delete takes N+1 arguments now.
+- Messages command for user and system message viewing.
+- Authorizations command.  Supports viewing and deleting authorizations.
 
 ### Changed
 - Improved debug_api command to be more pretty.
