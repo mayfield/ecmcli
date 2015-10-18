@@ -15,7 +15,7 @@ class Common(object):
         'profile.account'
     ])
 
-    def get_users(self, *usernames):
+    def get_users(self, usernames):
         return self.api.glob_pager('users', username=usernames,
                                    expand=self.expands)
 
@@ -108,24 +108,38 @@ class List(Common, Printer, base.ECMCommand):
         super().setup_args(parser)
 
     def run(self, args):
-        self.printer(self.get_users(*args.usernames))
+        self.printer(self.get_users(args.usernames))
 
 
 class Create(Common, base.ECMCommand):
     """ Create a new user. """
 
     name = 'create'
-    role_choices = ['admin', 'full', 'readonly']
 
     def setup_args(self, parser):
+        self.add_argument('--username')
         self.add_argument('--email')
         self.add_argument('--password')
         self.add_argument('--fullname')
-        self.add_argument('--role', choices=self.role_choices)
+        self.add_argument('--role',
+                          complete=self.make_completer('roles', 'name'))
+        self.add_argument('--account',
+                          complete=self.make_completer('accounts', 'name'))
         super().setup_args(parser)
 
+    def username_available(self, username):
+        return self.api.get('check_username', username=username)[0]['is_valid']
+
     def run(self, args):
-        username = args.email or input('Email: ')
+        while True:
+            username = args.username or input('Username: ')
+            if not self.username_available(username):
+                self.vtmlprint("<red>Username unavailable.</red>")
+                if args.username:
+                    raise SystemExit(1)
+            else:
+                break
+        email = args.email or input('Email: ')
         password = args.password
         if not password:
             password = getpass.getpass('Password (or empty to send email): ')
@@ -134,28 +148,26 @@ class Create(Common, base.ECMCommand):
                 if password != password2:
                     raise SystemExit("Aborted: passwords do not match")
         name = self.splitname(args.fullname or input('Full Name: '))
-        role = args.role or input('Role {%s}: ' % ', '.join(self.role_choices))
-        role_id = {
-            'admin': 1,
-            'full': 2,
-            'readonly': 3
-        }.get(role)
-        if not role_id:
-            raise SystemExit("Invalid role selection")
-        user = self.api.post('users', {
+        role = args.role or input('Role: ')
+        role_id = self.api.get_by_id_or_name('roles', role)['id']
+        user_data = {
             "username": username,
-            "email": username,
+            "email": email,
             "first_name": name[0],
             "last_name": name[1],
-            "password": password
-        }, expand='profile')
+            "password": password,
+        }
+        if args.account:
+            a = self.api.get_by_id_or_name('accounts', args.account)
+            user_data['account'] = a['resource_uri']
+        user = self.api.post('users', user_data, expand='profile')
         self.api.put('profiles', user['profile']['id'], {
             "require_password_change": not password
         })
         self.api.post('authorizations', {
             "account": user['profile']['account'],
             "cascade": True,
-            "role": '/api/v1/roles/%d/' % role_id,
+            "role": '/api/v1/roles/%s/' % role_id,
             "user": user['resource_uri']
         })
 
@@ -191,7 +203,7 @@ class Edit(Common, base.ECMCommand):
 class Delete(Common, base.ECMCommand):
     """ Delete a user. """
 
-    name = 'delete'
+    name = 'rm'
 
     def setup_args(self, parser):
         self.add_username_argument('usernames', nargs='+')
@@ -210,22 +222,19 @@ class Delete(Common, base.ECMCommand):
 class Move(Common, base.ECMCommand):
     """ Move a user to a different account. """
 
-    name = 'move'
+    name = 'mv'
 
     def setup_args(self, parser):
-        self.add_username_argument()
+        self.add_username_argument('usernames', nargs='+')
         self.add_account_argument('new_account',
                                   metavar='NEW_ACCOUNT_ID_OR_NAME')
         super().setup_args(parser)
 
     def run(self, args):
-        print(args.username)
-        print(args.new_account)
-        return
-        user = self.get_user(args.username)
         account = self.api.get_by_id_or_name('accounts', args.new_account)
-        self.api.put('profiles', user['profile']['id'],
-                     {"account": account['resource_uri']})
+        for user in self.get_users(args.usernames):
+            self.api.put('profiles', user['profile']['id'],
+                         {"account": account['resource_uri']})
 
 
 class Passwd(base.ECMCommand):

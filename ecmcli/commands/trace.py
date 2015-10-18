@@ -60,8 +60,8 @@ class Trace(base.ECMCommand):
                                'ERROR (%s)</b></red>' % (t, ms, error))
         else:
             shellish.vtmlprint('<cyan>%.3f</cyan> - <green>API DEBUG (%dms): '
-                               '<b>OK (len: %d)</b></green>' % (t, ms,
-                               len(result)))
+                               '<b>OK (len: %s)</b></green>' % (t, ms,
+                               len(result) if result is not None else 'empty'))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

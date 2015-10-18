@@ -6,7 +6,6 @@ alterations we make to API calls, such as filtering by router ids.
 import collections
 import collections.abc
 import fnmatch
-import functools
 import getpass
 import hashlib
 import html
