@@ -14,6 +14,10 @@ class Enable(base.ECMCommand):
 
     def run(self, *args):
         p = self.parent
+        if p.enabled:
+            raise SystemExit("Tracer already enabled")
+        else:
+            p.enabled = True
         self.api.add_listener('start_request', p.on_request_start)
         self.api.add_listener('finish_request', p.on_request_finish)
 
@@ -25,6 +29,10 @@ class Disable(base.ECMCommand):
 
     def run(self, *args):
         p = self.parent
+        if not p.enabled:
+            raise SystemExit("No tracer to disable")
+        else:
+            p.enabled = False
         self.api.remove_listener('finish_request', p.on_request_finish)
         self.api.remove_listener('start_request', p.on_request_start)
 
@@ -57,6 +65,7 @@ class Trace(base.ECMCommand):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.enabled = False
         self.add_subcommand(Enable, default=True)
         self.add_subcommand(Disable)
 

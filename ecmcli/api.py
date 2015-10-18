@@ -133,9 +133,9 @@ class Eventer(object):
         requirements. """
         event_stack = self.events[event]
         for x in event_stack:
-            if x['callback'] is callback and \
-               (single is not None and x['single'] == single) and \
-               (priority is not None and x['priority'] == priority):
+            if x['callback'] == callback and \
+               (single is None or x['single'] == single) and \
+               (priority is None or x['priority'] == priority):
                 event_stack.remove(x)
                 break
         else:
