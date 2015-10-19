@@ -34,7 +34,7 @@ class Formatter(object):
 
     def setup_args(self, parser):
         self.add_argument('-v', '--verbose', action='store_true')
-        self.add_table_group()
+        self.inject_table_factory()
         super().setup_args(parser)
 
     def prerun(self, args):
@@ -45,10 +45,9 @@ class Formatter(object):
         else:
             self.formatter = self.terse_formatter
             self.table_fields = self.terse_table_fields
-        self.table = shellish.Table(headers=[x[1] for x in self.table_fields],
-                                    renderer=args.table_format,
-                                    accessors=[self.safe_get(x[0], '')
-                                               for x in self.table_fields])
+        self.table = self.make_table(headers=[x[1] for x in self.table_fields],
+                                     accessors=[self.safe_get(x[0], '')
+                                                for x in self.table_fields])
         super().prerun(args)
 
     def safe_get(self, func, default=None):
@@ -168,7 +167,7 @@ class Create(base.ECMCommand):
 class Delete(base.ECMCommand):
     """ Delete an account """
 
-    name = 'delete'
+    name = 'rm'
 
     def setup_args(self, parser):
         self.add_account_argument('idents', nargs='+')
@@ -178,15 +177,15 @@ class Delete(base.ECMCommand):
         for x in args.idents:
             account = self.api.get_by_id_or_name('accounts', x)
             if not args.force:
-                base.confirm('Confirm account delete: %s (%s)' % (account['name'],
-                             account['id']))
+                base.confirm('Confirm account delete: %s (%s)' % (
+                             account['name'], account['id']))
             self.api.delete('accounts', account['id'])
 
 
 class Move(base.ECMCommand):
     """ Move account to new parent account """
 
-    name = 'move'
+    name = 'mv'
 
     def setup_args(self, parser):
         self.add_account_argument()

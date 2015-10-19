@@ -42,7 +42,7 @@ class ECMShell(shellish.Shell):
         account_filter = {"profile.account": parent['id']}
         for x in self.api.get_pager('users', **account_filter):
             items.append('u:%s' % x['username'])
-        self.columnize(items)
+        shellish.columnize(items)
 
     def do_login(self, arg):
         try:

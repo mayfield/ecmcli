@@ -82,18 +82,18 @@ class List(Common, base.ECMCommand):
                 return '(%s)' % row['securitytoken.account'].split('/')[-2]
 
     def setup_args(self, parser):
-        self.add_table_group()
         self.add_argument('--inactive', action='store_true',
                           help='Only show inactive authorizations.')
         self.add_argument('--verbose', '-v', action='store_true')
+        self.inject_table_factory()
         super().setup_args(parser)
 
     def run(self, args):
         auths = self.api.get_pager('authorizations',
                                    expand=','.join(self.expands))
         fields = self.terse_fields if not args.verbose else self.verbose_fields
-        with shellish.Table(headers=fields.values(), accessors=fields.keys(),
-                            renderer=args.table_format) as t:
+        with self.make_table(headers=fields.values(),
+                             accessors=fields.keys()) as t:
             t.print(map(dict, map(base.totuples, auths)))
 
 
@@ -106,20 +106,16 @@ class Roles(Common, base.ECMCommand):
     )
 
     def setup_args(self, parser):
-        self.add_table_group()
         self.add_argument('roles', nargs='*',
                           complete=self.make_completer('roles', 'name'))
         self.add_argument('--verbose', '-v', action='store_true')
+        self.inject_table_factory()
         super().setup_args(parser)
 
     def run(self, args):
         auths = self.api.get_pager('roles',
                                    expand=','.join(self.expands))
-        self.tabulate(auths)
-        #with shellish.Table(headers=self.fields.values(),
-        #                    accessors=self.fields.keys(),
-        #                    renderer=args.table_format) as t:
-        #    t.print(map(dict, map(base.totuples, auths)))
+        shellish.tabulate(auths)  # XXX not using table factory
 
 
 class Activate(Common, base.ECMCommand):

@@ -2,6 +2,7 @@
 Commands for managing firmware versions of routers.
 """
 
+import shellish
 from . import base
 
 
@@ -43,8 +44,8 @@ class Active(base.ECMCommand):
         data.extend(self.api.get('routers', group_by=fw_field,
                                  count='id,group'))
         standalone = lambda x: x['id_count'] - x['group_count']
-        self.tabulate(data, title='Active Firmware Stats',
-                      accessors=[fw_field, 'id_count', standalone])
+        shellish.tabulate(data, title='Active Firmware Stats',
+                          accessors=[fw_field, 'id_count', standalone])
 
 
 class Updates(AvailMixin, base.ECMCommand):

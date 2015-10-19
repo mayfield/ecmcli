@@ -4,7 +4,7 @@ Analyze and Report ECM Alerts.
 
 import collections
 import humanize
-import sys
+import shellish
 from . import base
 
 
@@ -20,18 +20,19 @@ class Alerts(base.ECMCommand):
     name = 'alerts'
 
     def setup_args(self, parser):
-        self.add_table_group()
+        self.inject_table_factory()
+        super().setup_args(parser)
 
     def run(self, args):
         by_type = collections.OrderedDict()
         alerts = self.api.get_pager('alerts', page_size=500,
                                     order_by='-created_ts')
-        msg = "\rCollecting new alerts: %5d"
-        print(msg % 0, end='')
-        sys.stdout.flush()
+        if shellish.is_terminal():
+            msg = "\rCollecting new alerts: %5d"
+            print(msg % 0, end='', flush=True)
         for i, x in enumerate(alerts, 1):
-            print(msg % i, end='')
-            sys.stdout.flush()
+            if shellish.is_terminal():
+                print(msg % i, end='', flush=True)
             try:
                 ent = by_type[x['alert_type']]
             except KeyError:
@@ -43,15 +44,11 @@ class Alerts(base.ECMCommand):
             else:
                 ent['records'].append(x),
                 ent['oldest'] = x['created_ts']
-        print()
-        data = [('Alert Type', 'Count', 'Most Recent', 'Oldest')]
-        data.extend((
-            name,
-            len(x['records']),
-            since(x['newest']),
-            since(x['oldest'])
-        ) for name, x in by_type.items())
-        t = self.tabulate(data, renderer=args.table_format)
-        t.close()
+        if shellish.is_terminal():
+            print()
+        headers = ['Alert Type', 'Count', 'Most Recent', 'Oldest']
+        with self.make_table(headers=headers) as t:
+            t.print((name, len(x['records']), since(x['newest']),
+                     since(x['oldest'])) for name, x in by_type.items())
 
 command_classes = [Alerts]

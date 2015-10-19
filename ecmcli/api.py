@@ -100,61 +100,7 @@ class ECMLogin(LoginAuth):
         return key and hashlib.sha256(key.encode()).hexdigest()
 
 
-class Eventer(object):
-    """ Very simple event framework. """
-
-    def __init__(self, *args, **kwargs):
-        self.events = {}
-        super().__init__(*args, **kwargs)
-
-    def add_events(self, events):
-        """ Setup events for this instance.  Just a list of strings. """
-        for x in events:
-            self.events.setdefault(x, [])
-
-    def add_listener(self, event, callback, single=False, priority=None):
-        event_stack = self.events[event]
-        if priority is None:
-            try:
-                priority = event_stack[-1]['priority'] + 1
-            except IndexError:
-                priority = 1
-        event_stack.append({
-            "callback": callback,
-            "single": single,
-            "priority": priority
-        })
-        event_stack.sort(key=lambda x: x['priority'])
-
-    def remove_listener(self, event, callback, single=None, priority=None):
-        """ Remove the event listener matching the signature used for adding
-        it.  This will remove at most one entry meeting the signature
-        requirements. """
-        event_stack = self.events[event]
-        for x in event_stack:
-            if x['callback'] == callback and \
-               (single is None or x['single'] == single) and \
-               (priority is None or x['priority'] == priority):
-                event_stack.remove(x)
-                break
-        else:
-            raise KeyError('Listener not found for "%s": %s'  % (event,
-                           callback))
-
-    def fire_event(self, event, *args, **kwargs):
-        """ Execute the listeners for this event passing any arguments
-        along. """
-        remove = []
-        event_stack = self.events[event]
-        for x in event_stack:
-            x['callback'](*args, **kwargs)
-            if x['single']:
-                remove.append(x)
-        for x in remove:
-            event_stack.remove(x)
-
-
-class ECMService(Eventer, syndicate.Service):
+class ECMService(shellish.Eventer, syndicate.Service):
 
     site = 'https://cradlepointecm.com'
     api_prefix = '/api/v1'

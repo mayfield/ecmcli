@@ -3,6 +3,7 @@ List/Edit/Manage ECM Users.
 """
 
 import datetime
+import functools
 import getpass
 import shellish
 from . import base
@@ -55,11 +56,10 @@ class Common(object):
 class Printer(object):
 
     def setup_args(self, parser):
-        self.add_table_group()
+        self.inject_table_factory()
         super().setup_args(parser)
 
     def prerun(self, args):
-        self.table_format = args.table_format
         self.verbose = args.verbose
         self.printer = self.verbose_printer if self.verbose else \
                        self.terse_printer
@@ -91,9 +91,8 @@ class Printer(object):
         self.print_table(fields, users)
 
     def print_table(self, fields, users):
-        with shellish.Table(headers=[x[1] for x in fields],
-                            accessors=[x[0] for x in fields],
-                            renderer=self.table_format) as t:
+        with self.make_table(headers=[x[1] for x in fields],
+                             accessors=[x[0] for x in fields]) as t:
             t.print(map(self.bundle_user, users))
 
 
@@ -134,7 +133,7 @@ class Create(Common, base.ECMCommand):
         while True:
             username = args.username or input('Username: ')
             if not self.username_available(username):
-                self.vtmlprint("<red>Username unavailable.</red>")
+                shellish.vtmlprint("<red>Username unavailable.</red>")
                 if args.username:
                     raise SystemExit(1)
             else:

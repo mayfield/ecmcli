@@ -239,7 +239,8 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
             if not isinstance(resp['dict'], dict):
                 return ['<b>%s</b>' % resp['dict']]
             else:
-                return self.tree({"<data>": resp['dict']}, render_only=True)
+                return shellish.dicttree({"<data>": resp['dict']},
+                                         render_only=True)
         else:
             error = resp.get('message', resp.get('reason',
                                                  resp.get('exception')))

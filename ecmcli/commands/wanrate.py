@@ -15,11 +15,11 @@ class WanRate(base.ECMCommand):
 
     def setup_args(self, parser):
         self.add_router_argument('idents', nargs='*')
-        self.add_table_group(excludes={'json'})
         self.add_argument('-s', '--sampletime',
                           help='How long to wait between sample captures '
                           'in seconds', type=float,
                           default=self.sample_delay)
+        self.inject_table_factory(format_excludes={'json'})
         super().setup_args(parser)
 
     def run(self, args):
@@ -33,8 +33,7 @@ class WanRate(base.ECMCommand):
         if not routers_by_id:
             raise SystemExit("No valid routers to monitor")
         headers = ['%s (%s)' % (x['name'], x['id']) for x in routers]
-        table = self.tabulate([headers], renderer=args.table_format,
-                              flex=False)
+        table = self.make_table(headers=headers, flex=False)
         while True:
             start = time.time()
             # XXX: We should calculate our own bps instead of using 'bps' to
@@ -55,5 +54,6 @@ class WanRate(base.ECMCommand):
                     value = '[%s]' % x['reason']
                 routers_by_id[str(x['id'])]['bps'] = value
             table.print_row([x['bps'] for x in routers])
+        table.close()
 
 command_classes = [WanRate]

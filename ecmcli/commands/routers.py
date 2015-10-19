@@ -5,7 +5,6 @@ Manage ECM Routers.
 import humanize
 import pickle
 import pkg_resources
-import shellish
 from . import base
 
 
@@ -29,8 +28,17 @@ class Printer(object):
 
     def setup_args(self, parser):
         self.add_argument('-v', '--verbose', action='store_true')
-        self.add_table_group()
+        self.inject_table_factory()
         super().setup_args(parser)
+
+    def prerun(self, args):
+        if args.verbose:
+            self.expands = self.verbose_expands
+            self.printer = self.verbose_printer
+        else:
+            self.expands = self.terse_expands
+            self.printer = self.terse_printer
+        super().prerun(args)
 
     def since(self, dt):
         """ Return humanized time since for an absolute datetime. """
@@ -73,9 +81,8 @@ class Printer(object):
             else:
                 print()
             x = self.bundle_router(x)
-            t = shellish.Table(columns=[key_col_width, None],
-                               headers=['Router Name', x['name']],
-                               renderer=self.table_format)
+            t = self.make_table(columns=[key_col_width, None],
+                                headers=['Router Name', x['name']])
             x['since'] = self.since(x['state_ts'])
             x['joined'] = self.since(x['create_ts']) + ' ago'
             x['account_info'] = '%s (%s)' % (x['account']['name'],
@@ -115,9 +122,8 @@ class Printer(object):
             ("ip_address", "IP Address"),
             (lambda x: self.colorize_conn_state(x['state']), "Conn")
         )
-        with shellish.Table(headers=[x[1] for x in fields],
-                            accessors=[x[0]for x in fields],
-                            renderer=self.table_format) as t:
+        with self.make_table(headers=[x[1] for x in fields],
+                             accessors=[x[0]for x in fields]) as t:
             t.print(map(self.bundle_router, routers))
 
     def colorize_conn_state(self, state):
@@ -135,16 +141,6 @@ class Printer(object):
         router['firmware_info'] = fw['version'] if fw else ''
         router['product_info'] = router['product']['name']
         return router
-
-    def prerun(self, args):
-        self.table_format = args.table_format
-        if args.verbose:
-            self.expands = self.verbose_expands
-            self.printer = self.verbose_printer
-        else:
-            self.expands = self.terse_expands
-            self.printer = self.terse_printer
-        super().prerun(args)
 
 
 class List(Printer, base.ECMCommand):
@@ -289,8 +285,8 @@ class Clients(base.ECMCommand):
 
     def setup_args(self, parser):
         self.add_router_argument('idents', nargs='*')
-        self.add_table_group()
         self.add_argument('-v', '--verbose', action="store_true")
+        self.inject_table_factory()
 
     @property
     def mac_db(self):
@@ -367,8 +363,7 @@ class Clients(base.ECMCommand):
                 lambda x: wifi_getter(x).get('rssi0', na),
                 lambda x: wifi_getter(x).get('txrate', na)
             ])
-        with shellish.Table(headers=headers, accessors=accessors,
-                            renderer=args.table_format) as t:
+        with self.make_table(headers=headers, accessors=accessors) as t:
             t.print(data)
 
 

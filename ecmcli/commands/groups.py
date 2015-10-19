@@ -41,12 +41,8 @@ class Printer(object):
     ])
 
     def setup_args(self, parser):
-        self.add_table_group()
+        self.inject_table_factory()
         super().setup_args(parser)
-
-    def prerun(self, args):
-        self.table_format = args.table_format
-        super().prerun(args)
 
     def bundle_group(self, group):
         group['product'] = group['product']['name']
@@ -108,9 +104,8 @@ class Printer(object):
             (self.sync_accessor, 'Config Sync'),
             (self.patch_accessor, 'Config Patch'),
         )
-        with shellish.Table(headers=[x[1] for x in fields],
-                            accessors=[x[0] for x in fields],
-                            renderer=self.table_format) as t:
+        with self.make_table(headers=[x[1] for x in fields],
+                             accessors=[x[0] for x in fields]) as t:
             t.print(map(self.bundle_group, groups))
 
 
@@ -272,7 +267,7 @@ class Config(base.ECMCommand):
         if args.json:
             print(json.dumps([adds, removes], indent=4), file=outfd)
         else:
-            treelines = self.tree(base.todict({
+            treelines = shellish.dicttree(base.todict({
                 "<additions>": adds,
                 "<removes>": removes
             }), render_only=True)

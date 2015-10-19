@@ -3,6 +3,7 @@ Foundation components for commands.
 """
 
 import collections
+import functools
 import itertools
 import shellish
 from ecmcli import shell
@@ -231,3 +232,15 @@ class ECMCommand(shellish.Command):
         options.setdefault('nargs', '+')
         return self.add_argument(*keys, help=searcher.help,
                                  complete=searcher.completer, **options)
+
+    def inject_table_factory(self, *args, **kwargs):
+        """ Use this in setup_args to produce a shellish.Table factory.  The
+        resultant factory will have defaults provided from the command line
+        args added in this method.  It can be called with any standard Table
+        arguments too. """
+        make_table_options = self.add_table_arguments(*args, **kwargs)
+
+        def setup_make_table(argument_ns):
+            options = make_table_options(argument_ns)
+            self.make_table = functools.partial(shellish.Table, **options)
+        self.add_listener('prerun', setup_make_table)

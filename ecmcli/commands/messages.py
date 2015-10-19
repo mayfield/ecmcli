@@ -49,7 +49,7 @@ class List(Common, base.ECMCommand):
     name = 'ls'
 
     def setup_args(self, parser):
-        self.add_table_group()
+        self.inject_table_factory()
         self.fields = (
             (self.id_acc, 'ID'),
             (self.created_acc, 'Created'),
@@ -85,9 +85,8 @@ class List(Common, base.ECMCommand):
         return self.humantime(x['expires'])
 
     def run(self, args):
-        with shellish.Table(headers=[x[1] for x in self.fields],
-                            accessors=[x[0] for x in self.fields],
-                            renderer=args.table_format) as t:
+        with self.make_table(headers=[x[1] for x in self.fields],
+                             accessors=[x[0] for x in self.fields]) as t:
             t.print(self.get_messages())
 
 
@@ -125,8 +124,8 @@ class Read(Common, base.ECMCommand):
             raise SystemExit("Invalid message type: %s" % args.ident[0])
         # NOTE: system_message does not support detail get.
         msg = self.api.get_by(['id'], res, ident[1])
-        self.vtmlprint('<b>Created: %s</b>' % msg['created'])
-        self.vtmlprint('<b>Subject: %s</b>' % msg['title'])
+        shellish.vtmlprint('<b>Created: %s</b>' % msg['created'])
+        shellish.vtmlprint('<b>Subject: %s</b>' % msg['title'])
         if 'message' in msg:
             output = shellish.htmlrender(msg['message'])
             for x in str(output).split('\n'):
@@ -136,8 +135,8 @@ class Read(Common, base.ECMCommand):
         if ident[0] == 'usr':
             self.api.put(res, ident[1], {"is_read": True})
         else:
-            self.vtmlprint("\n<red><b>WARNING:</b> Confirming system "
-                           "messages not supported</red>")
+            shellish.vtmlprint("\n<red><b>WARNING:</b> Confirming system "
+                               "messages not supported</red>")
 
 
 class Messages(base.ECMCommand):
