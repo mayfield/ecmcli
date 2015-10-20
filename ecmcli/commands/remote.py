@@ -56,8 +56,7 @@ class DeviceSelectorsMixin(object):
         args = vars(args_namespace)
         filters = {}
         if args.get('group'):
-            hit = self.api_res_lookup('groups', args['group'],
-                                      product__series=3)
+            hit = self.api_res_lookup('groups', args['group'])
             if hit:
                 filters['group'] = hit['id']
         if args.get('account'):
@@ -72,8 +71,7 @@ class DeviceSelectorsMixin(object):
             filters['actual_firmware.version'] = args['firmware']
         rids = []
         if args.get('router'):
-            hit = self.api_res_lookup('routers', args['router'],
-                                      product__series=3)
+            hit = self.api_res_lookup('routers', args['router'])
             if hit:
                 rids.append(hit['id'])
         if args.get('search'):
@@ -84,7 +82,6 @@ class DeviceSelectorsMixin(object):
             filters = dict(_or='|'.join('%s=%s' % x for x in filters.items()))
         if args.get('skip_offline'):
             filters['state'] = 'online'
-        filters['product__series'] = 3
         return filters
 
     def remote_pager(self, path, router_ids, page_size=None,
@@ -120,7 +117,7 @@ class DeviceSelectorsMixin(object):
             return
         results = collections.deque()
         path = path.replace('.', '/')
-        api = self.api.clone(async=True, adapter_config=dict(max_clients=50))
+        api = self.api.clone(async=True, adapter_config=dict(max_clients=100))
         ioloop = tornado.ioloop.IOLoop.current()
         futures = [api.get('remote', path, id=x['id']) for x in routers]
 
@@ -143,14 +140,11 @@ class DeviceSelectorsMixin(object):
     def completion_router_elect(self, **filters):
         """ Cached lookup of a router meeting the filters criteria to be used
         for completion lookups. """
-        filters.update({
-            'state': 'online',
-            'product__series': 3,
-            'limit': 1,
-            'fields': 'id'
-        })
-        r = self.api.get('routers', **filters)
-        return r and r[0]['id']
+        for x in self.api.get_pager('routers', page_size=1, state='online',
+                                    expand='product',
+                                    fields='id,product.series', **filters):
+            if x['product']['series'] == 3:
+                return x['id']
 
     def try_complete_path(self, prefix, args=None):
         filters = self.gen_selection_filters(args)
@@ -213,7 +207,9 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
 
     def run(self, args):
         filters = self.gen_selection_filters(args)
-        routers = list(self.api.get_pager('routers', **filters))
+        routers = [x for x in self.api.get_pager('routers', expand='product',
+                                                 **filters)
+                   if x['product']['series'] == 3]
         outfile = args.output_file
         outformat = args.output or outfile.name.rsplit('.', 1)[-1]
         fallback_format = self.tree_format if not args.repeat else \

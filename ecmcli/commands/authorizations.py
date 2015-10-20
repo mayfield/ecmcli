@@ -64,8 +64,11 @@ class List(Common, base.ECMCommand):
         """ Show the username@account or securitytoken@account. """
         try:
             return row['user.username']
-        except:
-            return row['securitytoken.label']
+        except KeyError:
+            try:
+                return row['securitytoken.label']
+            except KeyError:
+                return '<unassigned>'
 
     def orig_account_acc(self, row):
         """ Show the originating account. This is where the user/token hails
@@ -79,7 +82,10 @@ class List(Common, base.ECMCommand):
             try:
                 return row['securitytoken.account.name']
             except KeyError:
-                return '(%s)' % row['securitytoken.account'].split('/')[-2]
+                try:
+                    return '(%s)' % row['securitytoken.account'].split('/')[-2]
+                except KeyError:
+                    return '<unassigned>'
 
     def setup_args(self, parser):
         self.add_argument('--inactive', action='store_true',
