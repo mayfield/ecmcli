@@ -2,6 +2,7 @@
 Get and set remote values on series 3 routers.
 """
 
+import collections
 import csv
 import datetime
 import io
@@ -12,6 +13,7 @@ import shellish
 import syndicate.data
 import sys
 import time
+import tornado
 from . import base
 
 
@@ -99,7 +101,7 @@ class DeviceSelectorsMixin(object):
         for i in range(0, len(ids), page_size):
             for x in self.api.get('remote', path.replace('.', '/'),
                                   id__in=','.join(ids[i:i+page_size]),
-                                  limit=page_size):
+                                  limit=page_size, **query):
                 yield x
 
     def remote(self, path, routers, **query):
@@ -111,6 +113,31 @@ class DeviceSelectorsMixin(object):
             if x['success']:
                 x['dict'] = base.todict(x['data'])
             yield x
+
+    def async_remote(self, path, routers, **query):
+        routermap = dict((x['id'], x) for x in routers)
+        if not routermap:
+            return
+        results = collections.deque()
+        path = path.replace('.', '/')
+        api = self.api.clone(async=True, adapter_config=dict(max_clients=50))
+        ioloop = tornado.ioloop.IOLoop.current()
+        futures = [api.get('remote', path, id=x['id']) for x in routers]
+
+        def yieldish_result(f):
+            res = f.result()[0]
+            res['router'] = routermap.pop(str(res['id']))
+            if res['success']:
+                res['dict'] = base.todict(res['data'])
+            results.append(res)
+            ioloop.stop()
+
+        for f in futures:
+            ioloop.add_future(f, yieldish_result)
+        while routermap:
+            ioloop.start()
+            while results:
+                yield results.popleft()
 
     @shellish.ttl_cache(300)
     def completion_router_elect(self, **filters):
@@ -181,6 +208,8 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         self.add_argument('--repeat', type=float, metavar="SECONDS",
                           help="Repeat the request every N seconds. Only "
                           "appropriate for table format.")
+        self.add_argument('--xasync', action='store_true',
+                          help="XXX expermental async support.""")
 
     def run(self, args):
         filters = self.gen_selection_filters(args)
@@ -196,9 +225,12 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
             'table': self.table_format,
             'tree': self.tree_format,
         }.get(outformat) or fallback_format
-        feed = lambda: self.remote(args.path, routers)
+        if args.xasync:
+            feedfn = self.async_remote
+        else:
+            feedfn = self.remote
         try:
-            formatter(args, feed, file=outfile)
+            formatter(args, lambda: feedfn(args.path, routers), file=outfile)
         finally:
             if outfile is not sys.stdout:
                 outfile.close()

@@ -26,7 +26,7 @@ setup(
     packages=find_packages(),
     test_suite='test',
     install_requires=[
-        'syndicate==1.2.0',
+        'syndicate==1.3.0',
         'shellish==1',
         'humanize'
     ],

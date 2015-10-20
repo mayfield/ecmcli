@@ -42,31 +42,43 @@ class Trace(base.ECMCommand):
 
     name = 'trace'
 
-    def on_request_start(self, args=None, kwargs=None):
-        t = self.last_request_start = time.perf_counter()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.enabled = False
+        self.tracking = {}
+        self.add_subcommand(Enable, default=True)
+        self.add_subcommand(Disable)
+
+    def on_request_start(self, callid, args=None, kwargs=None):
+        t = time.perf_counter()
         method, path = args
         query = kwargs.copy()
         urn = query.pop('urn', self.api.urn)
         filters = ["%s=%s" % x for x in query.items()]
-        shellish.vtmlprint('<cyan>%.3f</cyan> - <blue>API DEBUG: %s /%s/%s?%s'
-                           % (t, method.upper(), urn.strip('/'),
-                           '/'.join(path).strip('/'), '&'.join(filters)))
+        sig = '<b>%s</b> /%s/%s?<dim>%s</dim>' % (
+              method.upper(), urn.strip('/'), '/'.join(path).strip('/'),
+              '&'.join(filters))
+        self.tracking[callid] = t, sig
+        shellish.vtmlprint('<cyan>%.3f</cyan> - API TRACE: <blue>%s</blue>' %
+                           (t, sig))
 
-    def on_request_finish(self, error=None, result=None):
+    def on_request_finish(self, callid, error=None, result=None):
         t = time.perf_counter()
-        ms = (t - self.last_request_start) * 1000
-        if error is not None:
-            shellish.vtmlprint('<cyan>%.3f</cyan> - <red>API DEBUG (%dms): <b>'
-                               'ERROR (%s)</b></red>' % (t, ms, error))
+        start, sig = self.tracking.pop(callid)
+        ms = (t - start) * 1000
+        if self.tracking:
+            addendum = ' [<magenta>%d call(s) outstanding</magenta>]' % \
+                       len(self.tracking)
         else:
-            shellish.vtmlprint('<cyan>%.3f</cyan> - <green>API DEBUG (%dms): '
-                               '<b>OK (len: %s)</b></green>' % (t, ms,
-                               len(result) if result is not None else 'empty'))
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.enabled = False
-        self.add_subcommand(Enable, default=True)
-        self.add_subcommand(Disable)
+            addendum = ''
+        if error is not None:
+            shellish.vtmlprint('<cyan>%.3f</cyan> - API TRACE (%dms): <red>%s '
+                               '<b>ERROR (%s)</b></red>%s' % (t, ms, sig,
+                               error, addendum))
+        else:
+            shellish.vtmlprint('<cyan>%.3f</cyan> - API TRACE (%dms): <green>'
+                               '%s <b>OK</b> (len: %s)</green>%s' % (t, ms, sig,
+                               len(result) if result is not None else 'empty',
+                               addendum))
 
 command_classes = [Trace]

@@ -10,6 +10,7 @@ import getpass
 import hashlib
 import html
 import html.parser
+import itertools
 import json
 import os
 import re
@@ -19,6 +20,7 @@ import syndicate
 import syndicate.client
 import syndicate.data
 import textwrap
+import tornado
 from syndicate.adapters.sync import LoginAuth
 
 
@@ -106,14 +108,27 @@ class ECMService(shellish.Eventer, syndicate.Service):
     api_prefix = '/api/v1'
     session_file = os.path.expanduser('~/.ecmcli_session')
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__(uri='nope', urn=self.api_prefix,
-                         serializer='htmljson')
+                         serializer='htmljson', **kwargs)
         self.add_events([
             'start_request',
             'finish_request',
             'reset_auth'
         ])
+        self.call_count = itertools.count()
+
+    def clone(self, **varations):
+        """ Produce a cloned instance of ourselves, including state. """
+        clone = type(self)(**varations)
+        copy = ('account', 'session_id', 'auth_sig', 'ident', 'uri', 'events')
+        for x in copy:
+            value = getattr(self, x)
+            if hasattr(value, 'copy'):  # containers
+                value = value.copy()
+            setattr(clone, x, value)
+        clone.adapter.set_cookie('sessionid', clone.session_id)
+        return clone
 
     @property
     def default_page_size(self):
@@ -159,7 +174,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
         self.session_id = session_id
         self.auth_sig = auth_sig
         if self.session_id:
-            self.adapter.session.cookies['sessionid'] = self.session_id
+            self.adapter.set_cookie('sessionid', self.session_id)
 
     def reset_session(self):
         """ Delete the session state file and return True if an action
@@ -174,7 +189,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def check_session(self):
         """ ECM sometimes updates the session token. We make sure we are in
         sync. """
-        session_id = self.adapter.session.cookies.get_dict()['sessionid']
+        session_id = self.adapter.get_cookie('sessionid')
         if session_id != self.session_id:
             with open(self.session_file, 'w') as f:
                 os.chmod(self.session_file, 0o600)
@@ -183,14 +198,20 @@ class ECMService(shellish.Eventer, syndicate.Service):
 
     def do(self, *args, **kwargs):
         """ Wrap some session and error handling around all API actions. """
-        self.fire_event('start_request', args=args, kwargs=kwargs)
+        callid = next(self.call_count)
+        self.fire_event('start_request', callid, args=args, kwargs=kwargs)
         try:
             result = self._do(*args, **kwargs)
         except BaseException as e:
-            self.fire_event('finish_request', error=e)
+            self.fire_event('finish_request', callid, error=e)
             raise e
         else:
-            self.fire_event('finish_request', result=result)
+            if isinstance(result, tornado.concurrent.Future):
+                done = lambda f: self.fire_event('finish_request', callid,
+                                                 result=f.result())
+                tornado.ioloop.IOLoop.current().add_future(result, done)
+            else:
+                self.fire_event('finish_request', callid, result=result)
             return result
 
     def _do(self, *args, **kwargs):
