@@ -197,33 +197,45 @@ class ECMCommand(shellish.Command):
 
     def add_router_argument(self, *keys, **options):
         options.setdefault('metavar', 'ROUTER_ID_OR_NAME')
-        options.setdefault('help', 'The ID or name of a router')
+        options.setdefault('help', 'The ID or name of a router.')
         return self.add_completer_argument(*keys, resource='routers',
                                            res_field='name', **options)
 
     def add_group_argument(self, *keys, **options):
         options.setdefault('metavar', 'GROUP_ID_OR_NAME')
-        options.setdefault('help', 'The ID or name of a group')
+        options.setdefault('help', 'The ID or name of a group.')
         return self.add_completer_argument(*keys, resource='groups',
                                            res_field='name', **options)
 
     def add_account_argument(self, *keys, **options):
         options.setdefault('metavar', 'ACCOUNT_ID_OR_NAME')
-        options.setdefault('help', 'The ID or name of an account')
+        options.setdefault('help', 'The ID or name of an account.')
         return self.add_completer_argument(*keys, resource='accounts',
                                            res_field='name', **options)
 
     def add_product_argument(self, *keys, **options):
         options.setdefault('metavar', 'PRODUCT_ID_OR_NAME')
-        options.setdefault('help', 'Product name, Eg. MBR1400')
+        options.setdefault('help', 'Product name, Eg. "MBR1400".')
         return self.add_completer_argument(*keys, resource='products',
                                            res_field='name', **options)
 
     def add_firmware_argument(self, *keys, **options):
         options.setdefault('metavar', 'FIRMWARE_VERSION')
-        options.setdefault('help', 'Version identifier, Eg. 5.4.1')
+        options.setdefault('help', 'Version identifier, Eg. "5.4.1".')
         return self.add_completer_argument(*keys, resource='firmwares',
                                            res_field='version', **options)
+
+    def add_role_argument(self, *keys, **options):
+        options.setdefault('metavar', 'ROLE')
+        options.setdefault('help', 'Authorization role, Eg. "admin".')
+        return self.add_completer_argument(*keys, resource='roles',
+                                           res_field='name', **options)
+
+    def add_user_argument(self, *keys, **options):
+        options.setdefault('metavar', 'USERNAME')
+        options.setdefault('help', 'Login user.')
+        return self.add_completer_argument(*keys, resource='users',
+                                           res_field='username', **options)
 
     def add_search_argument(self, searcher, *keys, **options):
         if not keys:
