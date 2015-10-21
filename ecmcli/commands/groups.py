@@ -138,6 +138,7 @@ class Create(base.ECMCommand):
         self.add_argument('--name')
         self.add_product_argument('--product')
         self.add_firmware_argument('--firmware')
+        self.add_account_argument('--account')
 
     def run(self, args):
         name = args.name or input('Name: ')
@@ -171,11 +172,15 @@ class Create(base.ECMCommand):
                 print("\t", x)
             raise SystemExit(1)
 
-        self.api.post('groups', {
+        group = {
             "name": name,
             "product": products[product]['resource_uri'],
             "target_firmware": firmwares[fw]['resource_uri']
-        })
+        }
+        if args.account:
+            account = self.api.get_by_id_or_name('accounts', args.account)
+            group['account'] = account['resource_uri']
+        self.api.post('groups', group)
 
 
 class Config(base.ECMCommand):
