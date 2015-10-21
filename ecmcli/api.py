@@ -22,6 +22,10 @@ import syndicate.data
 import textwrap
 import tornado
 from syndicate.adapters.sync import LoginAuth
+try:
+    from http.client import RemoteDisconnected as HTTPServerHangup
+except ImportError:  # not py3.5
+    from http.client import BadStatusLine as HTTPServerHangup
 
 
 class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
@@ -234,6 +238,11 @@ class ECMService(shellish.Eventer, syndicate.Service):
             result = super().do(*args, **kwargs)
         except syndicate.client.ResponseError as e:
             self.handle_error(e)
+            result = super().do(*args, **kwargs)
+        except HTTPServerHangup as e:
+            print("XXX: attempting recovery from server hangup.")
+            print("XXX: attempting recovery from server hangup.")
+            print("XXX: attempting recovery from server hangup.")
             result = super().do(*args, **kwargs)
         except Unauthorized as e:
             print('Auth Error:', e)
