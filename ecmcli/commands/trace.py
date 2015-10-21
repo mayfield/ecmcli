@@ -2,9 +2,13 @@
 Trace API activity.
 """
 
+import functools
 import shellish
+import sys
 import time
 from . import base
+
+vprint = functools.partial(shellish.vtmlprint, file=sys.stderr)
 
 
 class Enable(base.ECMCommand):
@@ -55,12 +59,15 @@ class Trace(base.ECMCommand):
         query = kwargs.copy()
         urn = query.pop('urn', self.api.urn)
         filters = ["%s=%s" % x for x in query.items()]
-        sig = '<b>%s</b> /%s/%s?<dim>%s</dim>' % (
-              method.upper(), urn.strip('/'), '/'.join(path).strip('/'),
-              '&'.join(filters))
+        sig = '<b>%s</b> /%s' % (method.upper(), urn.strip('/'))
+        if path:
+            sig += '/%s' % '/'.join(path).strip('/')
+        if filters:
+            sep = '&' if '?' in sig else '?'
+            sig += '%s%s' % (sep, '&'.join(filters))
         self.tracking[callid] = t, sig
-        shellish.vtmlprint('<cyan>%.3f</cyan> - API TRACE: <blue>%s</blue>' %
-                           (t, sig))
+        vprint('<cyan>%.3f[%d]</cyan> - API START: <blue>%s</blue>' % (t,
+               callid, sig))
 
     def on_request_finish(self, callid, error=None, result=None):
         t = time.perf_counter()
@@ -72,13 +79,12 @@ class Trace(base.ECMCommand):
         else:
             addendum = ''
         if error is not None:
-            shellish.vtmlprint('<cyan>%.3f</cyan> - API TRACE (%dms): <red>%s '
-                               '<b>ERROR (%s)</b></red>%s' % (t, ms, sig,
-                               error, addendum))
+            vprint('<cyan>%.3f[%d]</cyan> - API FINISH (%dms): <red>%s '
+                   '<b>ERROR (%s)</b></red>%s' % (t, callid, ms, sig, error,
+                   addendum))
         else:
-            shellish.vtmlprint('<cyan>%.3f</cyan> - API TRACE (%dms): <green>'
-                               '%s <b>OK</b> (len: %s)</green>%s' % (t, ms, sig,
-                               len(result) if result is not None else 'empty',
-                               addendum))
+            vprint('<cyan>%.3f[%d]</cyan> - API FINISH (%dms): <green>%s <b>'
+                   'OK</b> (len: %s)</green>%s' % (t, callid, ms, sig,
+                   len(result) if result is not None else 'empty', addendum))
 
 command_classes = [Trace]

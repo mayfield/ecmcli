@@ -121,7 +121,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def clone(self, **varations):
         """ Produce a cloned instance of ourselves, including state. """
         clone = type(self)(**varations)
-        copy = ('account', 'session_id', 'auth_sig', 'ident', 'uri', 'events')
+        copy = ('account', 'session_id', 'auth_sig', 'ident', 'uri', 'events',
+                'call_count')
         for x in copy:
             value = getattr(self, x)
             if hasattr(value, 'copy'):  # containers
@@ -133,7 +134,12 @@ class ECMService(shellish.Eventer, syndicate.Service):
     @property
     def default_page_size(self):
         """ Dynamically change the page size to the screen height. """
-        return max(20, min(100, shutil.get_terminal_size()[1]))
+        # Underflow the term height by a few rows to give a bit of context
+        # for each page.  For simple cases the output will pause on each
+        # page and this gives them a bit of old data or header data to look
+        # at while the next page is being loaded.
+        page_size = shutil.get_terminal_size()[1] - 4
+        return max(20, min(100, page_size))
 
     def connect(self, site=None, username=None, password=None):
         if site:
@@ -196,23 +202,30 @@ class ECMService(shellish.Eventer, syndicate.Service):
                 json.dump([session_id, self.auth_sig], f)
             self.session_id = session_id
 
+    def finish_do(self, callid, result_func, *args, reraise=True, **kwargs):
+        try:
+            result = result_func(*args, **kwargs)
+        except BaseException as e:
+            self.fire_event('finish_request', callid, error=e)
+            if reraise:
+                raise e
+            else:
+                return
+        else:
+            self.fire_event('finish_request', callid, result=result)
+        return result
+
     def do(self, *args, **kwargs):
         """ Wrap some session and error handling around all API actions. """
         callid = next(self.call_count)
         self.fire_event('start_request', callid, args=args, kwargs=kwargs)
-        try:
-            result = self._do(*args, **kwargs)
-        except BaseException as e:
-            self.fire_event('finish_request', callid, error=e)
-            raise e
+        if self.async:
+            future = self._do(*args, **kwargs)
+            on_fin = lambda f: self.finish_do(callid, f.result, reraise=False)
+            tornado.ioloop.IOLoop.current().add_future(future, on_fin)
+            return future
         else:
-            if isinstance(result, tornado.concurrent.Future):
-                done = lambda f: self.fire_event('finish_request', callid,
-                                                 result=f.result())
-                tornado.ioloop.IOLoop.current().add_future(result, done)
-            else:
-                self.fire_event('finish_request', callid, result=result)
-            return result
+            return self.finish_do(callid, self._do, *args, **kwargs)
 
     def _do(self, *args, **kwargs):
         if self.account is not None:
