@@ -3,7 +3,6 @@ List/Edit/Manage ECM Users.
 """
 
 import datetime
-import functools
 import getpass
 import shellish
 from . import base
