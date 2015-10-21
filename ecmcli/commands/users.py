@@ -66,11 +66,11 @@ class Printer(object):
 
     def verbose_printer(self, users):
         fields = [
+            ('id', 'ID'),
             ('username', 'Username'),
             ('name', 'Full Name'),
             ('account_desc', 'Account'),
             ('roles', 'Role(s)'),
-            ('id', 'ID'),
             ('email', 'EMail'),
             ('date_joined', 'Joined'),
             ('last_login', 'Last Login'),
@@ -80,11 +80,11 @@ class Printer(object):
 
     def terse_printer(self, users):
         fields = [
+            ('id', 'ID'),
             ('username', 'Username'),
             ('name', 'Full Name'),
             ('account_desc', 'Account'),
             ('roles', 'Role(s)'),
-            ('id', 'ID'),
             ('email', 'EMail')
         ]
         self.print_table(fields, users)
