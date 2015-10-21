@@ -2,6 +2,7 @@
 Manage ECM Accounts.
 """
 
+import collections
 import shellish
 from . import base
 
@@ -98,7 +99,9 @@ class Tree(Formatter, base.ECMCommand):
         their descendants is to get massive pages from the root level, which
         already include descendants;  Build our own tree and do account level
         filtering client-side.  This theory is proven as of ECM 7-18-2015. """
-        accounts_pager = self.api.get_pager('accounts', page_size=10000)
+        expands = ','.join(self.expands)
+        accounts_pager = self.api.get_pager('accounts', expand=expands,
+                                            page_size=10000)
         accounts = dict((x['resource_uri'], x) for x in accounts_pager)
         root_ref = root = {"node": shellish.TreeNode('root')}
         for uri, x in accounts.items():
@@ -171,15 +174,53 @@ class Delete(base.ECMCommand):
 
     def setup_args(self, parser):
         self.add_account_argument('idents', nargs='+')
-        self.add_argument('-f', '--force', action='store_true')
+        self.add_argument('-f', '--force', action='store_true',
+                          help='Do not prompt for confirmation')
+        self.add_argument('-r', '--recursive', action='store_true',
+                          help='Delete all subordinate resources too.')
 
     def run(self, args):
         for x in args.idents:
             account = self.api.get_by_id_or_name('accounts', x)
+            if args.recursive:
+                resources = self.get_subordinates(account)
+            else:
+                resources = {}
             if not args.force:
-                base.confirm('Confirm account delete: %s (%s)' % (
-                             account['name'], account['id']))
+                if resources:
+                    r = resources
+                    base.confirm('Confirm removal of "%s" along with %d '
+                                 'subaccounts, %d groups, %d routers and %d '
+                                 'users' % (account['name'],
+                                 len(r['subaccounts']), len(r['groups']),
+                                 len(r['routers']), len(r['users'])))
+                    for x in reversed(r['users']):
+                        self.api.delete(urn=x['user'])
+                    for x in reversed(r['routers']):
+                        self.api.delete(urn=x['resource_uri'])
+                    for x in reversed(r['groups']):
+                        self.api.delete(urn=x['resource_uri'])
+                    for x in reversed(r['subaccounts']):
+                        self.api.delete(urn=x['resource_uri'])
+                else:
+                    base.confirm('Confirm account delete: %s (%s)' % (
+                                 account['name'], account['id']))
             self.api.delete('accounts', account['id'])
+
+    def get_subordinates(self, account):
+        """ Recursively look for resources underneath this account. """
+        resources = collections.defaultdict(list)
+        for x in self.api.get_pager(urn=account['subaccounts']):
+            resources['subaccounts'].append(x)
+            for res, items in self.get_subordinates(x).items():
+                resources[res].extend(items)
+        for x in self.api.get_pager(urn=account['groups']):
+            resources['groups'].append(x)
+        for x in self.api.get_pager(urn=account['routers']):
+            resources['routers'].append(x)
+        for x in self.api.get_pager(urn=account['user_profiles']):
+            resources['users'].append(x)
+        return resources
 
 
 class Move(base.ECMCommand):
