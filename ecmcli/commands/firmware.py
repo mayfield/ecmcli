@@ -67,7 +67,7 @@ class Updates(AvailMixin, base.ECMCommand):
             name = '%s v%s' % (x['product__name'], x[fw_field])
             if avail:
                 no_updates = False
-                self.vtmlprint("<b>Updates available for: %s</b>" % name)
+                shellish.vtmlprint("<b>Updates available for: %s</b>" % name)
                 for xx in avail:
                     print("\tv%s (Release Date: %s)" % (xx['version'],
                           xx['release_date'].date()))
