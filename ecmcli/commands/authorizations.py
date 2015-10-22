@@ -241,6 +241,97 @@ class Edit(Common, base.ECMCommand):
             self.api.put('authorizations', auth['id'], updates)
 
 
+class RoleExamine(base.ECMCommand):
+    """ Examine the permissions of a role. """
+
+    name = 'examine'
+    method_colors = {
+        'get': 'green',
+        'put': 'magenta',
+        'post': 'magenta',
+        'patch': 'magenta',
+        'delete': 'red'
+    }
+
+    def setup_args(self, parser):
+        self.add_role_argument()
+        self.add_argument('--resources', nargs='+', help='Limit display to '
+                          'these resource(s).')
+        self.add_argument('--methods', metavar="METHOD", nargs='+',
+                          help='Limit display to resources permitted to use '
+                          'these method(s).')
+        self.inject_table_factory()
+        super().setup_args(parser)
+
+    def color_code(self, method):
+        color = self.method_colors.get(method.lower(), 'yellow')
+        return '<%s>%s</%s>' % (color, method, color)
+
+    def run(self, args):
+        """ Unroll perms for a role. """
+        role = self.api.get_by_id_or_name('roles', args.ident,
+                                          expand='permissions')
+        if args.methods:
+            methods = set(x.lower() for x in args.methods)
+        rights = collections.defaultdict(dict)
+        operations = set()
+        for x in role['permissions']:
+            res = x['subject']
+            op = x['operation']
+            if args.resources and res not in args.resources:
+                continue
+            if args.methods and op not in methods:
+                continue
+            operations |= {op}
+            rights[res]['name'] = res
+            rights[res][op] = self.color_code(op.upper())
+        title = 'Permissions for: %s (%s)' % (role['name'], role['id'])
+        headers = ['API Resource'] + ([''] * len(operations))
+        accessors = ['name'] + sorted(operations)
+        with self.make_table(title=title, headers=headers,
+                             accessors=accessors) as t:
+            t.print(sorted(rights.values(), key=lambda x: x['name']))
+
+
+class Roles(base.ECMCommand):
+    """ View authorization roles.
+    List the available roles in the system or examine the exact permissions
+    provided by a given role. """
+
+    name = 'roles'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_subcommand(RoleExamine)
+        self.fields = collections.OrderedDict((
+            ('id', 'ID'),
+            ('name', 'Name'),
+            ('get', 'GETs'),
+            ('put', 'PUTs'),
+            ('post', 'POSTs'),
+            ('delete', 'DELETEs'),
+            ('patch', 'PATCHes'),
+        ))
+
+    def setup_args(self, parser):
+        self.inject_table_factory()
+        super().setup_args(parser)
+
+    def run(self, args):
+        operations = set()
+        roles = list(self.api.get_pager('roles', expand='permissions'))
+        for x in roles:
+            counts = collections.Counter(xx['operation']
+                                         for xx in x['permissions'])
+            operations |= set(counts)
+            x.update(counts)
+        ops = sorted(operations)
+        headers = ['ID', 'Name'] + ['%ss' % x.upper() for x in ops]
+        accessors = ['id', 'name'] + ops
+        with self.make_table(headers=headers, accessors=accessors) as t:
+            t.print(roles)
+
+
 class Authorizations(base.ECMCommand):
     """ View and edit authorizations along with managing collaborations. """
 
@@ -252,5 +343,6 @@ class Authorizations(base.ECMCommand):
         self.add_subcommand(Delete)
         self.add_subcommand(Create)
         self.add_subcommand(Edit)
+        self.add_subcommand(Roles)
 
 command_classes = [Authorizations]
