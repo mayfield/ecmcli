@@ -118,8 +118,16 @@ class DeviceSelectorsMixin(object):
                     x['dict'] = base.todict(x['data'])
                 yield x
 
-    def async_remote(self, path, filters, concurrency=20, timeout=3600,
-                     **query):
+    def async_remote(self, *args, **kwargs):
+        """ Proxy control of async remote call with ioloop cleanup. """
+        ioloop = tornado.ioloop.IOLoop.current()
+        try:
+            return self._async_remote(ioloop, *args, **kwargs)
+        finally:
+            ioloop.stop()
+
+    def _async_remote(self, ioloop, path, filters, concurrency=None,
+                      timeout=None, **query):
         results = collections.deque()
         config = {"max_clients": concurrency}
         page_slice = max(10, round(concurrency / 3))
@@ -127,7 +135,6 @@ class DeviceSelectorsMixin(object):
         page_semaphore = tornado.locks.Semaphore(page_concurrency)
         api = self.api.clone(async=True, request_timeout=timeout,
                              connect_timeout=timeout, adapter_config=config)
-        ioloop = tornado.ioloop.IOLoop.current()
         pending = 1
 
         def harvest_result(f):
@@ -245,6 +252,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         super().setup_args(parser)
         output_options = parser.add_argument_group('output options')
         or_group = output_options.add_mutually_exclusive_group()
+        self.inject_table_factory(skip_formats=True)
         for x in ('json', 'csv', 'xml', 'table', 'tree'):
             self.add_argument('--%s' % x, dest='output', action='store_const',
                               const=x, parser=or_group)
@@ -257,10 +265,18 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         self.add_argument('--repeat', type=float, metavar="SECONDS",
                           help="Repeat the request every N seconds. Only "
                           "appropriate for table format.")
-        self.add_argument('--async', action='store_true',
+
+        advanced = parser.add_argument_group('advanced options')
+        self.add_argument('--async', action='store_true', parser=advanced,
                           help="Asynchronous IO Mode.")
-        self.add_argument('--curl', action='store_true',
+        self.add_argument('--curl', action='store_true', parser=advanced,
                           help="Use CURL for Asynchronous IO Mode.")
+        self.add_argument('--async-concurrency', type=int, default=20,
+                          parser=advanced, help='Maximum number of concurrent '
+                          'connections.')
+        self.add_argument('--async-timeout', type=float, default=3600,
+                          parser=advanced, help='Maximum time in seconds for '
+                          'each connection.')
 
     def run(self, args):
         filters = self.gen_selection_filters(args)
@@ -280,11 +296,16 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
             tornado.httpclient.AsyncHTTPClient.configure(tcurl)
         if args.async:
             feedfn = self.async_remote
+            feedopts = {
+                'concurrency': args.async_concurrency,
+                'timeout': args.async_timeout
+            }
         else:
             feedfn = self.remote
+            feedopts = {}
         try:
             formatter(args, lambda: feedfn(args.path.replace('.', '/'),
-                                           filters), file=outfile)
+                                           filters, **feedopts), file=outfile)
         finally:
             if outfile is not sys.stdout:
                 outfile.close()
@@ -357,7 +378,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
 
         headers = ['Name', 'ID', 'Success', 'Response']
         title = 'Remote data for: %s' % args.path
-        with shellish.Table(title=title, headers=headers, file=file) as t:
+        with self.make_table(title=title, headers=headers, file=file) as t:
             t.print(cook())
             if worked:
                 t.print_footer('Succeeded: %d' % worked)
@@ -378,8 +399,8 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                            status(x)) for x in results]
                 order = [x['id'] for x in results]
                 title = 'Remote data for: %s' % args.path
-                table = shellish.Table(title=title, headers=headers,
-                                       file=file)
+                table = self.make_table(title=title, headers=headers,
+                                        file=file)
             else:
                 # Align columns with the first requests ordering.
                 results.sort(key=lambda x: order.index(x['id']))
@@ -460,35 +481,6 @@ class Set(DeviceSelectorsMixin, base.ECMCommand):
                      '%s %s' % (ok['exception'], ok.get('message', ''))
             print('%s:' % x['name'], status)
 
-
-class ConfigDefinition(base.ECMCommand):
-    """ Display config store data definition (dtd) for a specific product and
-    firmware.  Each router supports different config settings and this command
-    is useful to introspect the config structure for a particular device
-    variant. """
-
-    name = 'dtd'
-
-    def setup_args(self, parser):
-        super().setup_args(parser)
-        self.add_product_argument('--product', default="MBR1400")
-        self.add_firmware_argument('--firmware', default="5.4.1")
-        self.add_argument('path', complete=self.complete_dtd_path)
-
-    def complete_dtd_path(self, prefix, args=None):
-        return set('wan', 'lan', 'system', 'firewall')
-
-    def run(self, args):
-        filters = {
-            "product.name": args.product,
-            "firmware.version": args.firmware
-        }
-        firmwares = self.api.get('firmwares', **filters)
-        if not firmwares:
-            raise SystemExit("Firmware not found: %s v%s" % (args.product,
-                             args.firmware))
-        dtd = self.api.get(urn=firmwares[0]['dtd'])
-        print(dtd)
 
 
 class Diff(base.ECMCommand):
