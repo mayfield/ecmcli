@@ -41,9 +41,9 @@ class ECMRoot(base.ECMCommand):
 
     def setup_args(self, parser):
         distro = pkg_resources.get_distribution('ecmcli')
-        self.add_argument('--api_username')
-        self.add_argument('--api_password')
-        self.add_argument('--api_site',
+        self.add_argument('--api-username')
+        self.add_argument('--api-password')
+        self.add_argument('--api-site',
                           help='E.g. https://cradlepointecm.com')
         self.add_argument('--debug', action='store_true')
         self.add_argument('--version', action='version',
@@ -58,6 +58,9 @@ def main():
         _main()
     except KeyboardInterrupt:
         sys.exit(1)
+    except BrokenPipeError:
+        sys.exit(1)
+
 
 def _main():
     root = ECMRoot(api=api.ECMService())
