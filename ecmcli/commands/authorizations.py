@@ -1,33 +1,17 @@
 """
-View and edit authorizations along with setup collaborations with others.
+View and edit authorizations along with managing collaborations.
 """
 
 import collections
-import functools
-import humanize
 import shellish
 from . import base
 
-
 class Common(object):
+    """ Mixin of common stuff. """
 
-    def get_messages(self):
-        """ Combine system and user message streams. """
-        messages = list(self.api.get_pager('system_message',
-                                           type__nexact='tos'))
-        messages.extend(self.api.get_pager('user_messages'))
-        messages.sort(key=lambda x: x['created'], reverse=True)
-        return messages
-
-    @functools.lru_cache()
-    def get_user(self, user_urn):
-        return self.api.get(urn=user_urn)
-
-    def humantime(self, dt):
-        if dt is None:
-            return ''
-        since = dt.now(tz=dt.tzinfo) - dt
-        return humanize.naturaltime(since)
+    def add_auth_argument(self):
+        self.add_argument('authid', metavar='ID',
+                          complete=self.make_completer('authorizations', 'id'))
 
 
 class List(Common, base.ECMCommand):
@@ -54,6 +38,7 @@ class List(Common, base.ECMCommand):
             (lambda x: check if not x['active'] else '', 'Inactive'),
         ))
         self.terse_fields = collections.OrderedDict((
+            ('id', 'ID'),
             (self.trustee_acc, 'Beneficiary (user/token)'),
             ('role.name', 'Role'),
             ('account.name', 'Rights on (account)'),
@@ -88,76 +73,184 @@ class List(Common, base.ECMCommand):
                     return '<unassigned>'
 
     def setup_args(self, parser):
+        self.add_user_argument('--beneficiary', help='Limit display to this '
+                               'beneficiary.')
+        self.add_role_argument('--role', help='Limit display to this role.')
+        self.add_account_argument('--rights-on', help='Limit display to '
+                                  'records affecting this account.')
         self.add_argument('--inactive', action='store_true',
-                          help='Only show inactive authorizations.')
+                          help='Limit display to inactive records.')
         self.add_argument('--verbose', '-v', action='store_true')
         self.inject_table_factory()
         super().setup_args(parser)
 
     def run(self, args):
+        filters = {}
+        if args.beneficiary:
+            beni = args.beneficiary
+            filters['_or'] = 'user__username=%s|securitytoken.label=%s' % (
+                             beni, beni)
+        if args.role:
+            filters['role__name'] = args.role
+        if args.rights_on:
+            filters['account__name'] = args.rights_on
+        if args.inactive:
+            filters['active'] = False
         auths = self.api.get_pager('authorizations',
-                                   expand=','.join(self.expands))
+                                   expand=','.join(self.expands), **filters)
         fields = self.terse_fields if not args.verbose else self.verbose_fields
         with self.make_table(headers=fields.values(),
                              accessors=fields.keys()) as t:
             t.print(map(dict, map(base.totuples, auths)))
 
 
-class Roles(Common, base.ECMCommand):
-    """ Describe a role's permissions. """
+class Delete(Common, base.ECMCommand):
+    """ Delete an authorization """
 
-    name = 'role'
-    expands = (
-        'permissions',
-    )
+    name = 'rm'
 
     def setup_args(self, parser):
-        self.add_argument('roles', nargs='*',
-                          complete=self.make_completer('roles', 'name'))
-        self.add_argument('--verbose', '-v', action='store_true')
-        self.inject_table_factory()
+        self.add_auth_argument()
+        self.add_argument('-f', '--force', action="store_true")
+        super().setup_args(parser)
+
+    def format_auth(self, auth):
+        if auth['user']:
+            try:
+                beni = auth['user']['username']
+            except TypeError:
+                beni = '(%s)' % auth['user'].split('/')[-2]
+        elif auth['securitytoken']:
+            try:
+                beni = auth['securitytoken']['label']
+            except TypeError:
+                beni = '(%s)' % auth['securitytoken'].split('/')[-2]
+        else:
+            beni = '<unassigned>'
+        try:
+            rights_on = auth['account']['name']
+        except TypeError:
+            rights_on = '(%s)' % auth['account'].split('/')[-2]
+        return '%s [%s -> %s]' % (auth['id'], beni, rights_on)
+
+    def run(self, args):
+        auth = self.api.get_by('id', 'authorizations', args.authid,
+                               expand='user,securitytoken,account')
+        if not args.force:
+            base.confirm('Delete authorization: %s' % self.format_auth(auth))
+        self.api.delete('authorizations', auth['id'])
+
+
+class Create(Common, base.ECMCommand):
+    """ Create a new authorization. """
+
+    name = 'create'
+
+    def setup_args(self, parser):
+        beni = parser.add_mutually_exclusive_group()
+        self.add_user_argument('--beneficiary-user', parser=beni,
+                               help='Username to benefit.')
+        self.add_argument('--beneficiary-token', parser=beni, type=int,
+                          help='Security token ID to benefit.')
+        self.add_role_argument('--role', help='Role for the beneficiary.')
+        self.add_account_argument('--rights-on', help='Account bestowing '
+                                  'rights to.')
+        self.add_argument('--no-cascade', action='store_true')
+        self.add_argument('--foreign', action='store_true', help='Create an '
+                          'authorization for a foreign user. Sometimes '
+                          'referred to as a collaborator request.')
         super().setup_args(parser)
 
     def run(self, args):
-        auths = self.api.get_pager('roles',
-                                   expand=','.join(self.expands))
-        shellish.tabulate(auths)  # XXX not using table factory
+        new = {
+            "cascade": not args.no_cascade
+        }
+        foreign = args.foreign
+        user = args.beneficiary_user
+        token = args.beneficiary_token
+        if foreign and token:
+            raise SystemExit("Foreign authorizations only work with users.")
+        if not user and not token:
+            if foreign:
+                user = input("Enter collaborator beneficiary username: ")
+                if not user:
+                    raise SystemExit("User Required")
+            else:
+                user = input("Enter beneficiary username (<enter> to skip): ")
+                if not user:
+                    token = input("Enter beneficiary token ID: ")
+                    if not token:
+                        raise SystemExit("User or Token Required")
+        if user:
+            if foreign:
+                new['username'] = user
+            else:
+                user = self.api.get_by('username', 'users', user)
+                new['user'] = user['resource_uri']
+        elif token:
+            token = self.api.get_by('id', 'securitytokens', token)
+            new['securitytoken'] = token['resource_uri']
+        role = args.role or input('Role: ')
+        new['role'] = self.api.get_by_id_or_name('roles', role)['resource_uri']
+        rights_on = args.rights_on or input('Account (rights on): ')
+        new['account'] = self.api.get_by_id_or_name('accounts',
+                                                    rights_on)['resource_uri']
+        resource = 'authorizations' if not foreign else \
+                   'foreign_authorizations'
+        self.api.post(resource, new)
 
 
-class Activate(Common, base.ECMCommand):
-    """ Activate an authorization.
-    This is the way you accept a collaboration invite. """
+class Edit(Common, base.ECMCommand):
+    """ Edit authorization attributes. """
 
-    name = 'activate'
+    name = 'edit'
 
     def setup_args(self, parser):
-        self.add_argument('ident', metavar='ID',
-                          complete=self.make_completer('authorizations', 'id'))
-                          #complete=self.complete_id)
+        self.add_auth_argument()
+        self.add_role_argument('--role')
+        self.add_account_argument('--account')
+        cascade = parser.add_mutually_exclusive_group()
+        self.add_argument('--cascade', action='store_true', parser=cascade,
+                          help="Permit beneficiary rights to subaccounts.")
+        self.add_argument('--no-cascade', action='store_true', parser=cascade)
+        active = parser.add_mutually_exclusive_group()
+        self.add_argument('--activate', action='store_true', parser=active,
+                          help="Activate the authorization.")
+        self.add_argument('--deactivate', action='store_true', parser=active,
+                          help="Deactivate the authorization.")
         super().setup_args(parser)
 
-    @shellish.ttl_cache(60)
-    def cached_auths(self):
-        return frozenset(x['id']
-                         for x in self.api.get_pager('authorizations'))
-
-    def complete_id(self, prefix, args):
-        return set(x for x in self.cached_auths()
-                   if x.startswith(prefix))
-
     def run(self, args):
-        self.api.put('authorizations', args.ident, dict(active=True))
+        auth = self.api.get_by('id', 'authorizations', args.authid)
+        updates = {}
+        if args.role:
+            role = self.api.get_by_id_or_name('roles', args.role)
+            updates['role'] = role['resource_uri']
+        if args.cascade:
+            updates['cascade'] = True
+        elif args.no_cascade:
+            updates['cascade'] = False
+        if args.activate:
+            updates['active'] = True
+        elif args.deactivate:
+            updates['active'] = False
+        if args.account:
+            role = self.api.get_by_id_or_name('accounts', args.role)
+            updates['account'] = role['resource_uri']
+        if updates:
+            self.api.put('authorizations', auth['id'], updates)
 
 
 class Authorizations(base.ECMCommand):
-    """ Read/Acknowledge any messages from the system. """
+    """ View and edit authorizations along with managing collaborations. """
 
     name = 'authorizations'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_subcommand(List, default=True)
-        self.add_subcommand(Activate)
-        self.add_subcommand(Roles)
+        self.add_subcommand(Delete)
+        self.add_subcommand(Create)
+        self.add_subcommand(Edit)
 
 command_classes = [Authorizations]
