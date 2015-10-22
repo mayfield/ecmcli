@@ -194,32 +194,28 @@ class Delete(base.ECMCommand):
                                  'users' % (account['name'],
                                  len(r['subaccounts']), len(r['groups']),
                                  len(r['routers']), len(r['users'])))
-                    for x in reversed(r['users']):
-                        self.api.delete(urn=x['user'])
-                    for x in reversed(r['routers']):
-                        self.api.delete(urn=x['resource_uri'])
-                    for x in reversed(r['groups']):
-                        self.api.delete(urn=x['resource_uri'])
-                    for x in reversed(r['subaccounts']):
-                        self.api.delete(urn=x['resource_uri'])
                 else:
                     base.confirm('Confirm account delete: %s (%s)' % (
                                  account['name'], account['id']))
+            if resources:
+                for res in ('users', 'routers', 'groups', 'subaccounts'):
+                    for x in resources[res]:
+                        self.api.delete(urn=x)
             self.api.delete('accounts', account['id'])
 
     def get_subordinates(self, account):
         """ Recursively look for resources underneath this account. """
         resources = collections.defaultdict(list)
         for x in self.api.get_pager(urn=account['subaccounts']):
-            resources['subaccounts'].append(x)
             for res, items in self.get_subordinates(x).items():
                 resources[res].extend(items)
+            resources['subaccounts'].append(x['resource_uri'])
         for x in self.api.get_pager(urn=account['groups']):
-            resources['groups'].append(x)
+            resources['groups'].append(x['resource_uri'])
         for x in self.api.get_pager(urn=account['routers']):
-            resources['routers'].append(x)
+            resources['routers'].append(x['resource_uri'])
         for x in self.api.get_pager(urn=account['user_profiles']):
-            resources['users'].append(x)
+            resources['users'].append(x['user'])
         return resources
 
 
