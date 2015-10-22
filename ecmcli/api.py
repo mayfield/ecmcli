@@ -40,14 +40,18 @@ class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
 
 def text_pager(data):
     width, height = shutil.get_terminal_size()
-    data = textwrap.wrap(data, width-4)
     i = 0
-    for x in data:
-        i += 1
-        if i == height - 1:
-            input("<Press enter to view next page>")
-            i = 0
-        print(x)
+    for section in data:
+        lines = textwrap.wrap(section, width-4)
+        if not lines:
+            i += 1
+            print()
+        for x in lines:
+            i += 1
+            if i == height - 2:
+                input("<Press enter to view next page>")
+                i = 0
+            print(x)
 
 
 syndicate.data.serializers['htmljson'] = syndicate.data.Serializer(
@@ -271,7 +275,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
         for tos in self.get_pager('system_message', type='tos'):
             input("You must read and accept the terms of service to "
                   "continue: <press enter>")
-            text_pager(str(shellish.htmlrender(tos['message'])))
+            text_pager(str(shellish.htmlrender(tos['message'])).splitlines())
             print()
             accept = input('Type "accept" to comply with the TOS: ')
             if accept != 'accept':
