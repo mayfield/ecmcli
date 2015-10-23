@@ -261,7 +261,7 @@ class Move(base.ECMCommand):
 class Delete(base.ECMCommand):
     """ Delete (unregister) a router from ECM """
 
-    name = 'delete'
+    name = 'rm'
 
     def setup_args(self, parser):
         self.add_router_argument('idents', nargs='+')
@@ -399,6 +399,7 @@ class Routers(base.ECMCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_subcommand(List, default=True)
+        self.add_subcommand(Edit)
         self.add_subcommand(Search)
         self.add_subcommand(Move)
         self.add_subcommand(GroupAssign)
