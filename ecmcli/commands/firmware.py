@@ -2,6 +2,7 @@
 Commands for managing firmware versions of routers.
 """
 
+import json
 import shellish
 from . import base
 
@@ -134,6 +135,69 @@ class Upgrade(AvailMixin, base.ECMCommand):
                      urn=ent['resource_uri'])
 
 
+class DTD(base.ECMCommand):
+    """ Show the DTD for a firmware version.
+    Each firmware has a configuration data-type-definition which describes and
+    regulates the structure and types that go into a router's config. """
+
+    name = 'dtd'
+
+    def setup_args(self, parser):
+        self.add_firmware_argument('--firmware', help='Limit display to this '
+                                   'firmware version.')
+        self.add_product_argument('--product', help='Limit display to this '
+                                  'product type.')
+        self.add_product_argument('path', nargs='?', help='Dot notation '
+                                  'offset into the DTD tree.')
+        output = parser.add_argument_group('output formats', 'Change the '
+                                           'DTD output format.')
+        for x in ('json', 'tree'):
+            self.add_argument('--%s' % x, dest='format', action='store_const',
+                              const=x, parser=output)
+        self.add_file_argument('--output-file', '-o', mode='w', default='-',
+                               metavar="OUTPUT_FILE", parser=output)
+        super().setup_args(parser)
+
+    def walk_dtd(self, dtd, path):
+        """ Walk into a DTD tree.  The path argument is the path as it relates
+        to a rendered config and not the actual dtd structure which is double
+        nested to contain more information about the structure. """
+        offt = {'nodes': dtd}
+        for x in path.split('.'):
+            try:
+                offt = offt['nodes'][x]
+            except KeyError:
+                raise SystemExit('DTD path not found: %s' % path)
+        return offt
+
+    def run(self, args):
+        filters = {}
+        if args.firmware:
+            filters['version'] = args.firmware
+        if args.product:
+            filters['product__name'] = args.product
+        firmwares = self.api.get('firmwares', expand='dtd', limit=1, **filters)
+        if not firmwares:
+            raise SystemExit("No firmware DTD matches this specification.")
+        if firmwares.meta['total_count'] > 1:
+            shellish.vtmlprint('<red><b>WARNING:</b></red> More than one '
+                               'firmware DTD found for this specification.')
+        dtd = firmwares[0]['dtd']['value']
+        output = args.output_file
+        if args.path:
+            dtd = self.walk_dtd(dtd, args.path)
+        if args.format == 'json':
+            return self.json(dtd, file=output)
+        else:
+            return self.tree(dtd, file=output)
+
+    def tree(self, dtd, file=None):
+        shellish.treeprint(dtd)
+
+    def json(self, dtd, file=None):
+        print(json.dumps(dtd, indent=4), file=file)
+
+
 class Firmware(base.ECMCommand):
     """ Manage ECM Routers. """
 
@@ -144,5 +208,6 @@ class Firmware(base.ECMCommand):
         self.add_subcommand(Active, default=True)
         self.add_subcommand(Updates)
         self.add_subcommand(Upgrade)
+        self.add_subcommand(DTD)
 
 command_classes = [Firmware]

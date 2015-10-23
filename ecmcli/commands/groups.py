@@ -272,10 +272,10 @@ class Config(base.ECMCommand):
         if args.json:
             print(json.dumps([adds, removes], indent=4), file=outfd)
         else:
-            treelines = shellish.dicttree(base.todict({
+            treelines = shellish.treeprint({
                 "<additions>": adds,
                 "<removes>": removes
-            }), render_only=True)
+            }, render_only=True)
             for x in treelines:
                 print(x, file=outfd)
         if outfd is not sys.stdout:

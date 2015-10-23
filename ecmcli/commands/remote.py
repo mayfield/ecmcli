@@ -114,8 +114,6 @@ class DeviceSelectorsMixin(object):
             for x in self.api.get('remote', path, id__in=','.join(idmap),
                                   limit=page_size, **query):
                 x['router'] = idmap[str(x['id'])]
-                if x['success']:
-                    x['dict'] = base.todict(x['data'])
                 yield x
 
     def async_remote(self, *args, **kwargs):
@@ -149,9 +147,6 @@ class DeviceSelectorsMixin(object):
                     "message": str(e),
                     "id": int(f.router['id'])
                 }
-            else:
-                if res['success']:
-                    res['dict'] = base.todict(res['data'])
             res['router'] = f.router
             results.append(res)
             ioloop.stop()
@@ -320,7 +315,6 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                           'state'):
                     result[x] = result['router'].get(x)
                 result.pop('router', None)
-                result.pop('dict', None)
                 yield result
         args = vars(args).copy()
         for key, val in list(args.items()):
@@ -343,11 +337,11 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         """ Render a tree of the response data if it was successful otherwise
         return a formatted error response.  The return type is iterable. """
         if resp['success']:
-            if not isinstance(resp['dict'], dict):
-                return ['<b>%s</b>' % resp['dict']]
+            if not isinstance(resp['data'], (dict, list)):
+                return ['<b>%s</b>' % resp['data']]
             else:
-                return shellish.dicttree({"<data>": resp['dict']},
-                                         render_only=True)
+                return shellish.treeprint({"<data>": resp['data']},
+                                          render_only=True)
         else:
             error = resp.get('message', resp.get('reason',
                                                  resp.get('exception')))
@@ -540,7 +534,6 @@ class Remote(base.ECMCommand):
         super().__init__(*args, **kwargs)
         self.add_subcommand(Get, default=True)
         self.add_subcommand(Set)
-        self.add_subcommand(ConfigDefinition)
         self.add_subcommand(Diff)
 
 command_classes = [Remote]
