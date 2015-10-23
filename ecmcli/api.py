@@ -44,7 +44,7 @@ def text_pager(data):
             print()
         for x in lines:
             i += 1
-            if i == height - 2:
+            if i >= height - 2:
                 input("<Press enter to view next page>")
                 i = 0
             print(x)
