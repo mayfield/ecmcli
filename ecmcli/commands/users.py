@@ -262,6 +262,7 @@ class Search(Common, Printer, base.ECMCommand):
     def setup_args(self, parser):
         searcher = self.make_searcher('users', self.fields)
         self.lookup = searcher.lookup
+        self.add_argument('-v', '--verbose', action='store_true')
         self.add_search_argument(searcher)
         super().setup_args(parser)
 
