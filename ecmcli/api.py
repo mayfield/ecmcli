@@ -258,7 +258,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
         if err in ('login_failure', 'unauthorized'):
             self.reset_auth()
             return
-        if resp['message']:
+        if resp.get('message'):
             err += '\n%s' % resp['message'].strip()
         raise SystemExit("Error: %s" % err)
 
