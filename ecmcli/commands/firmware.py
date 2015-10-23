@@ -147,8 +147,10 @@ class DTD(base.ECMCommand):
                                    'firmware version.')
         self.add_product_argument('--product', help='Limit display to this '
                                   'product type.')
-        self.add_product_argument('path', nargs='?', help='Dot notation '
-                                  'offset into the DTD tree.')
+        self.add_argument('path', nargs='?', help='Dot notation offset into '
+                          'the DTD tree.')
+        self.add_argument('--shallow', '-s', action='store_true',
+                          help='Only show one level of the DTD.')
         output = parser.add_argument_group('output formats', 'Change the '
                                            'DTD output format.')
         for x in ('json', 'tree'):
@@ -158,17 +160,20 @@ class DTD(base.ECMCommand):
                                metavar="OUTPUT_FILE", parser=output)
         super().setup_args(parser)
 
-    def walk_dtd(self, dtd, path):
+    def walk_dtd(self, dtd, path=None):
         """ Walk into a DTD tree.  The path argument is the path as it relates
         to a rendered config and not the actual dtd structure which is double
         nested to contain more information about the structure. """
         offt = {'nodes': dtd}
-        for x in path.split('.'):
-            try:
-                offt = offt['nodes'][x]
-            except KeyError:
-                raise SystemExit('DTD path not found: %s' % path)
-        return offt
+        if path:
+            for x in path.split('.'):
+                try:
+                    offt = offt['nodes'][x]
+                except KeyError:
+                    raise SystemExit('DTD path not found: %s' % path)
+        else:
+            path = '<root>'
+        return {path: offt}
 
     def run(self, args):
         filters = {}
@@ -184,8 +189,10 @@ class DTD(base.ECMCommand):
                                'firmware DTD found for this specification.')
         dtd = firmwares[0]['dtd']['value']
         output = args.output_file
-        if args.path:
-            dtd = self.walk_dtd(dtd, args.path)
+        dtd = self.walk_dtd(dtd, args.path)
+        if args.shallow:
+            if 'nodes' in dtd:
+                dtd['nodes'] = list(dtd['nodes'])
         if args.format == 'json':
             return self.json(dtd, file=output)
         else:
