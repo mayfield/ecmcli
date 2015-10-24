@@ -11,10 +11,10 @@
 - Authorizations command.  Supports viewing and deleting authorizations.
 
 ### Changed
-- Improved debug_api command to be more pretty.
+- Improved `debug_api` command to be more pretty; Also renamed to `trace`
 
 ### Fixed
-- Command groups-edit with --firmware uses correct firmware product variant.
+- Command groups-edit with `--firmware` uses correct firmware product variant.
 - Fix for `BlockingIOError` after using `shell` command.
 
 
@@ -68,7 +68,8 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v2.4.9...HEAD
+[unreleased]: https://github.com/mayfield/ecmcli/compare/v3...HEAD
+[3]: https://github.com/mayfield/ecmcli/compare/v2.4.9...v3
 [2.4.9]: https://github.com/mayfield/ecmcli/compare/v2.4.0...v2.4.9
 [2.4.0]: https://github.com/mayfield/ecmcli/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/mayfield/ecmcli/compare/v2.1.0...v2.3.0
