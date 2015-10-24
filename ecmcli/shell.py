@@ -2,9 +2,7 @@
 Interactive shell for ECM.
 """
 
-import code
 import shellish
-from . import api
 
 
 class ECMShell(shellish.Shell):

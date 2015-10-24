@@ -7,7 +7,6 @@ import collections
 import collections.abc
 import fnmatch
 import getpass
-import hashlib
 import html
 import html.parser
 import itertools
@@ -73,16 +72,23 @@ class TOSRequired(AuthFailure):
 
 class ECMLogin(LoginAuth):
 
-    def setup(self, username, password):
+    def __init__(self, *args, **kwargs):
+        self.initial_session_id = None
+        self.session_mode = None
+        super().__init__(*args, **kwargs)
+
+    def use_login(self, username, password):
         self.login = None
-        try:
-            self.username = username or input('Username: ')
-        except RuntimeError:  # Readline (input) is not reentrant.
-            raise Unauthorized('Unable to login in this context')
+        self.session_mode = False
+        self.initial_session_id = None
         self.req_kwargs = dict(data=self.serializer({
-            "username": self.username,
-            "password": password or getpass.getpass()
+            "username": username,
+            "password": password
         }))
+
+    def use_session(self, session_id):
+        self.session_mode = True
+        self.initial_session_id = session_id
 
     def check_login_response(self):
         super().check_login_response()
@@ -90,20 +96,22 @@ class ECMLogin(LoginAuth):
         if resp.get('success') is False:
             raise Unauthorized(resp['error_code'])
 
-    def __call__(self, request):
+    def reset(self, request):
         try:
             del request.headers['Cookie']
         except KeyError:
             pass
-        return super().__call__(request)
 
-    @property
-    def signature(self):
-        return self.gen_signature(self.username)
-
-    @staticmethod
-    def gen_signature(key):
-        return key and hashlib.sha256(key.encode()).hexdigest()
+    def __call__(self, request):
+        if self.session_mode:
+            if self.initial_session_id:
+                self.reset(request)
+                request.prepare_cookies({"sessionid": self.initial_session_id})
+                self.initial_session_id = None
+        elif self.login is None:
+            self.reset(request)
+            return super().__call__(request)
+        return request
 
 
 class ECMService(shellish.Eventer, syndicate.Service):
@@ -115,7 +123,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def __init__(self, **kwargs):
         super().__init__(uri='nope', urn=self.api_prefix,
                          serializer='htmljson', **kwargs)
-        self.auth_sig = None
+        self.username = None
         self.session_id = None
         self.add_events([
             'start_request',
@@ -127,7 +135,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def clone(self, **varations):
         """ Produce a cloned instance of ourselves, including state. """
         clone = type(self)(**varations)
-        copy = ('account', 'session_id', 'auth_sig', 'ident', 'uri', 'events',
+        copy = ('account', 'session_id', 'username', 'ident', 'uri', 'events',
                 'call_count')
         for x in copy:
             value = getattr(self, x)
@@ -151,53 +159,74 @@ class ECMService(shellish.Eventer, syndicate.Service):
         if site:
             self.site = site
         self.account = None
-        self.hard_username = username
-        self.hard_password = password
         self.uri = self.site
-        self.load_session(ECMLogin.gen_signature(username))
-        if not self.session_id:
-            self.login()
-        else:
-            self.ident = self.get('login')
+        self.adapter.auth = ECMLogin(url='%s%s/login/' % (self.site,
+                                     self.api_prefix))
+        if username or not self.load_session(try_last=True):
+            self.login(username, password)
 
     def reset_auth(self):
         self.fire_event('reset_auth')
+        self.adapter.set_cookie('sessionid', None)
         self.save_session(None)
         self.login()
 
     def login(self, username=None, password=None):
-        self.session_id = None
-        self.auth_sig = None
-        auth = ECMLogin(url='%s%s/login/' % (self.site, self.api_prefix))
-        username = self.hard_username if username is None else username
-        password = self.hard_password if password is None else password
-        auth.setup(username, password)
-        self.auth_sig = auth.signature
-        self.adapter.auth = auth
+        try:
+            username = username or input('Username: ')
+        except RuntimeError:  # Readline (input) is not reentrant.
+            raise Unauthorized('Unable to login in this context')
+        if not self.load_session(username):
+            self.set_auth(username, password or getpass.getpass())
+
+    def set_auth(self, username, password=None, session_id=None):
+        if password is not None:
+            self.adapter.auth.use_login(username, password)
+        elif session_id:
+            self.adapter.auth.use_session(session_id)
+        else:
+            raise TypeError("password or session_id required")
+        self.save_last_username(username)
+        self.username = username
         self.ident = self.get('login')
 
-    def get_session(self, auth_sig=None):
-        if auth_sig is None:
-            auth_sig = self.auth_sig
+    def get_session(self, username=None, use_last=False):
+        if use_last:
+            if username is not None:
+                raise RuntimeError("use_last and username are exclusive")
+        elif username is None:
+            raise TypeError("username required unless use_last=True")
         with shelve.open(self.session_file) as s:
             try:
-                return s[self.uri][auth_sig]
+                site = s[self.uri]
+                if not username:
+                    username = site['last_username']
+                return username, site['sessions'][username]
             except KeyError:
-                pass
+                return None, None
+
+    def save_last_username(self, username):
+        with shelve.open(self.session_file) as s:
+            site = s.get(self.uri, {})
+            site['last_username'] = username
+            s[self.uri] = site  # Required to persist; see shelve docs.
 
     def save_session(self, session):
         with shelve.open(self.session_file) as s:
-            data = s.get(self.uri, {})
-            data[self.auth_sig] = data[None] = session
-            s[self.uri] = data
+            site = s.get(self.uri, {})
+            sessions = site.setdefault('sessions', {})
+            sessions[self.username] = session
+            s[self.uri] = site  # Required to persist; see shelve docs.
 
-    def load_session(self, auth_sig=None):
-        session = self.get_session(auth_sig)
-        session_id = session['id'] if session else None
-        self.session_id = session_id
-        self.auth_sig = auth_sig
+    def load_session(self, username=None, try_last=False):
+        username, session = self.get_session(username, use_last=try_last)
+        self.session_id = session['id'] if session else None
         if self.session_id:
-            self.adapter.set_cookie('sessionid', self.session_id)
+            self.set_auth(username, session_id=self.session_id)
+            return True
+        else:
+            self.username = None
+            return False
 
     def check_session(self):
         """ ECM sometimes updates the session token. We make sure we are in
