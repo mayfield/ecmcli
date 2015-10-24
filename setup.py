@@ -28,7 +28,8 @@ setup(
     install_requires=[
         'syndicate==1.4.0',
         'shellish==1',
-        'humanize'
+        'humanize',
+        'tornado>=4.2.0'
     ],
     entry_points = {
         'console_scripts': ['ecm=ecmcli.main:main'],
