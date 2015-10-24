@@ -244,7 +244,7 @@ class Edit(base.ECMCommand):
 class Move(base.ECMCommand):
     """ Move a router to different account """
 
-    name = 'move'
+    name = 'mv'
 
     def setup_args(self, parser):
         self.add_router_argument()
