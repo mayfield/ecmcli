@@ -7,7 +7,7 @@ import pkg_resources
 import shellish
 import sys
 from . import api
-from .commands import base
+from .commands import base, shtools
 
 command_modules = [
     'accounts',
@@ -50,6 +50,8 @@ class ECMRoot(base.ECMCommand):
                           version=distro.version)
 
     def run(self, args):
+        for x in shtools.command_classes:
+            self.add_subcommand(x)
         self.interact()
 
 

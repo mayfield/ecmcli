@@ -11,10 +11,10 @@ import hashlib
 import html
 import html.parser
 import itertools
-import json
 import os
 import re
 import shellish
+import shelve
 import shutil
 import syndicate
 import syndicate.client
@@ -110,11 +110,13 @@ class ECMService(shellish.Eventer, syndicate.Service):
 
     site = 'https://cradlepointecm.com'
     api_prefix = '/api/v1'
-    session_file = os.path.expanduser('~/.ecmcli_session')
+    session_file = os.path.expanduser('~/.ecm_session')
 
     def __init__(self, **kwargs):
         super().__init__(uri='nope', urn=self.api_prefix,
                          serializer='htmljson', **kwargs)
+        self.auth_sig = None
+        self.session_id = None
         self.add_events([
             'start_request',
             'finish_request',
@@ -154,56 +156,57 @@ class ECMService(shellish.Eventer, syndicate.Service):
         self.uri = self.site
         self.load_session(ECMLogin.gen_signature(username))
         if not self.session_id:
-            self.reset_auth()
+            self.login()
         else:
             self.ident = self.get('login')
 
     def reset_auth(self):
         self.fire_event('reset_auth')
-        self.reset_session()
+        self.save_session(None)
+        self.login()
+
+    def login(self, username=None, password=None):
+        self.session_id = None
+        self.auth_sig = None
         auth = ECMLogin(url='%s%s/login/' % (self.site, self.api_prefix))
-        auth.setup(self.hard_username, self.hard_password)
+        username = self.hard_username if username is None else username
+        password = self.hard_password if password is None else password
+        auth.setup(username, password)
         self.auth_sig = auth.signature
         self.adapter.auth = auth
         self.ident = self.get('login')
 
-    def load_session(self, signature_lock):
-        session_id = auth_sig = None
-        try:
-            with open(self.session_file) as f:
-                d = json.load(f)
-                try:
-                    session_id, auth_sig = d
-                except ValueError:  # old style session
-                    pass
-                else:
-                    if signature_lock and auth_sig != signature_lock:
-                        session_id = auth_sig = None
-        except FileNotFoundError:
-            pass
+    def get_session(self, auth_sig=None):
+        if auth_sig is None:
+            auth_sig = self.auth_sig
+        with shelve.open(self.session_file) as s:
+            try:
+                return s[self.uri][auth_sig]
+            except KeyError:
+                pass
+
+    def save_session(self, session):
+        with shelve.open(self.session_file) as s:
+            data = s.get(self.uri, {})
+            data[self.auth_sig] = data[None] = session
+            s[self.uri] = data
+
+    def load_session(self, auth_sig=None):
+        session = self.get_session(auth_sig)
+        session_id = session['id'] if session else None
         self.session_id = session_id
         self.auth_sig = auth_sig
         if self.session_id:
             self.adapter.set_cookie('sessionid', self.session_id)
-
-    def reset_session(self):
-        """ Delete the session state file and return True if an action
-        happened. """
-        self.session_id = None
-        self.auth_sig = None
-        try:
-            os.remove(self.session_file)
-        except FileNotFoundError:
-            pass
 
     def check_session(self):
         """ ECM sometimes updates the session token. We make sure we are in
         sync. """
         session_id = self.adapter.get_cookie('sessionid')
         if session_id != self.session_id:
-            with open(self.session_file, 'w') as f:
-                os.chmod(self.session_file, 0o600)
-                json.dump([session_id, self.auth_sig], f)
+            self.save_session({
+                "id": session_id
+            })
             self.session_id = session_id
 
     def finish_do(self, callid, result_func, *args, reraise=True, **kwargs):

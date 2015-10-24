@@ -27,6 +27,9 @@ class ECMShell(shellish.Shell):
     def __init__(self, root_command):
         super().__init__(root_command)
         self.api = root_command.api
+        self.reset_cwd()
+
+    def reset_cwd(self):
         self.cwd = [self.api.ident['account']]
 
     def do_ls(self, arg):
@@ -43,16 +46,6 @@ class ECMShell(shellish.Shell):
         for x in self.api.get_pager('users', **account_filter):
             items.append('u:%s' % x['username'])
         shellish.columnize(items)
-
-    def do_login(self, arg):
-        try:
-            self.api.reset_auth()
-        except api.AuthFailure as e:
-            print('Auth Error:', e)
-
-    def do_debug(self, arg):
-        """ Run an interactive python interpretor. """
-        code.interact(None, None, self.__dict__)
 
     def do_cd(self, arg):
         cwd = self.cwd[:]
