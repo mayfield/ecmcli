@@ -21,7 +21,6 @@ command_modules = [
     'messages',
     'remote',
     'routers',
-    'settings',
     'shell',
     'trace',
     'users',
