@@ -60,12 +60,13 @@ class Updates(AvailMixin, base.ECMCommand):
         fw_field = 'actual_firmware__version'
         no_updates = True
         for x in self.api.get('routers', group_by=fw_field +
-                              ',product__name'):
+                              ',product__name', count='id'):
             if x[fw_field] is None:
                 continue  # unsupported/dev fw
             avail = self.available_firmware(product_name=x['product__name'],
                                             version=x[fw_field])
-            name = '%s v%s' % (x['product__name'], x[fw_field])
+            name = '%s v%s (%s devices)' % (x['product__name'], x[fw_field],
+                                            x['id_count'])
             if avail:
                 no_updates = False
                 shellish.vtmlprint("<b>Updates available for: %s</b>" % name)
