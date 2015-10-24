@@ -4,6 +4,7 @@
 ## [Unreleased] - unreleased
 
 
+## [3] - 2015-10-24
 ### Added
 - Multiple output formats for remote-get command (XML, JSON, CSV, Table)
 - Firmware command for status, update check and quick upgrade.
