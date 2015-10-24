@@ -95,8 +95,8 @@ class Printer(object):
 
     def printer(self, groups):
         fields = (
-            ("name", 'Name'),
             ("id", 'ID'),
+            ("name", 'Name'),
             ("account_name", 'Account'),
             ("product", 'Product'),
             ("firmware", 'Firmware'),
@@ -308,7 +308,7 @@ class Edit(base.ECMCommand):
 class Delete(base.ECMCommand):
     """ Delete one or more groups. """
 
-    name = 'delete'
+    name = 'rm'
 
     def setup_args(self, parser):
         self.add_group_argument('idents', nargs='+')
@@ -327,7 +327,7 @@ class Delete(base.ECMCommand):
 class Move(base.ECMCommand):
     """ Move group to a different account. """
 
-    name = 'move'
+    name = 'mv'
 
     def setup_args(self, parser):
         self.add_group_argument()
