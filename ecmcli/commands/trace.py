@@ -3,6 +3,7 @@ Trace API activity.
 """
 
 import functools
+import itertools
 import shellish
 import sys
 import time
@@ -15,6 +16,7 @@ class Enable(base.ECMCommand):
     """ Enable API Tracing. """
 
     name = 'enable'
+    use_pager = False
 
     def run(self, *args):
         p = self.parent
@@ -22,14 +24,19 @@ class Enable(base.ECMCommand):
             raise SystemExit("Tracer already enabled")
         else:
             p.enabled = True
-        self.api.add_listener('start_request', p.on_request_start)
-        self.api.add_listener('finish_request', p.on_request_finish)
+        p.session_verbosity_save = self.session.command_error_verbosity
+        self.session.command_error_verbosity = 'traceback'
+        self.api.on('start_request', p.on_request_start)
+        self.api.on('finish_request', p.on_request_finish)
+        self.session.on('precmd', p.on_command_start)
+        self.session.on('postcmd', p.on_command_finish)
 
 
 class Disable(base.ECMCommand):
     """ Disable API Tracing. """
 
     name = 'disable'
+    use_pager = False
 
     def run(self, *args):
         p = self.parent
@@ -37,21 +44,38 @@ class Disable(base.ECMCommand):
             raise SystemExit("No tracer to disable")
         else:
             p.enabled = False
-        self.api.remove_listener('finish_request', p.on_request_finish)
-        self.api.remove_listener('start_request', p.on_request_start)
+        self.api.un('finish_request', p.on_request_finish)
+        self.api.un('start_request', p.on_request_start)
+        self.session.un('precmd', p.on_command_start)
+        self.session.un('postcmd', p.on_command_finish)
+        self.session.command_error_verbosity = p.session_verbosity_save
 
 
 class Trace(base.ECMCommand):
     """ Trace API calls. """
 
     name = 'trace'
+    use_pager = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.enabled = False
         self.tracking = {}
-        self.add_subcommand(Enable, default=True)
+        self.add_subcommand(Enable)
         self.add_subcommand(Disable)
+
+    def run(self, args):
+        if self.enabled:
+            self['disable'](argv='')
+            print("Trace Disabled")
+        else:
+            self['enable'](argv='')
+            print("Trace Enabled")
+
+    def tprint(self, ident, category, message, code='blue'):
+        t = time.perf_counter()
+        vprint('<cyan>%.3f[%s]</cyan> - %s: <%s>%s</%s>' % (t, ident,
+               category, code, message, code))
 
     def on_request_start(self, callid, args=None, kwargs=None):
         t = time.perf_counter()
@@ -66,25 +90,45 @@ class Trace(base.ECMCommand):
             sep = '&' if '?' in sig else '?'
             sig += '%s%s' % (sep, '&'.join(filters))
         self.tracking[callid] = t, sig
-        vprint('<cyan>%.3f[%d]</cyan> - API START: <blue>%s</blue>' % (t,
-               callid, sig))
+        self.tprint(callid, 'API START', sig)
 
-    def on_request_finish(self, callid, error=None, result=None):
+    def on_request_finish(self, callid, result=None, exc=None):
         t = time.perf_counter()
         start, sig = self.tracking.pop(callid)
-        ms = (t - start) * 1000
+        ms = round((t - start) * 1000)
         if self.tracking:
             addendum = ' [<magenta>%d call(s) outstanding</magenta>]' % \
                        len(self.tracking)
         else:
             addendum = ''
-        if error is not None:
-            vprint('<cyan>%.3f[%d]</cyan> - API FINISH (%dms): <red>%s '
-                   '<b>ERROR (%s)</b></red>%s' % (t, callid, ms, sig, error,
-                   addendum))
+        if exc is not None:
+            self.tprint(callid, 'API FINISH (%dms)' % ms, '%s <b>ERROR (%s)'
+                        '</b>%s' % (sig, exc, addendum), code='red')
         else:
-            vprint('<cyan>%.3f[%d]</cyan> - API FINISH (%dms): <green>%s <b>'
-                   'OK</b> (len: %s)</green>%s' % (t, callid, ms, sig,
-                   len(result) if result is not None else 'empty', addendum))
+            rlen = len(result) if result is not None else 'empty'
+            self.tprint(callid, 'API FINISH (%dms)' % ms, '%s <b>OK</b> '
+                        '(len: %s)%s' % (sig, rlen, addendum), code='green')
+
+    def on_command_start(self, command, args):
+        command.__trace_ts = time.perf_counter()
+        args = vars(args)
+        for i in itertools.count(0):
+            if 'command%d' % i in args:
+                del args['command%d' % i]
+            else:
+                break
+        self.tprint(command.prog, 'COMMAND RUN', args)
+
+    def on_command_finish(self, command, args, result=None, exc=None):
+        try:
+            ms = round((time.perf_counter() - command.__trace_ts) * 1000)
+        except AttributeError:
+            ms = 0
+        if exc:
+            self.tprint(command.prog, 'COMMAND FINISH (%dms)' % ms, exc,
+                        code='red')
+        else:
+            self.tprint(command.prog, 'COMMAND FINISH (%dms)' % ms, result,
+                        code='green')
 
 command_classes = [Trace]

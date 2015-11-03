@@ -187,6 +187,7 @@ class GroupAssign(base.ECMCommand):
     """ Assign a router to a [new] group. """
 
     name = 'groupassign'
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_router_argument()
@@ -262,6 +263,7 @@ class Delete(base.ECMCommand):
     """ Delete (unregister) a router from ECM """
 
     name = 'rm'
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_router_argument('idents', nargs='+')
@@ -371,6 +373,7 @@ class Reboot(base.ECMCommand):
     """ Reboot connected router(s). """
 
     name = 'reboot'
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_router_argument('idents', nargs='*')

@@ -6,7 +6,6 @@ import collections
 import functools
 import itertools
 import shellish
-from ecmcli import shell
 from xml.dom import minidom
 
 
@@ -82,8 +81,8 @@ def todict(obj, str_array_keys=False):
 class ECMCommand(shellish.Command):
     """ Extensions for dealing with ECM's APIs. """
 
+    use_pager = True
     Searcher = collections.namedtuple('Searcher', 'lookup, completer, help')
-    Shell = shell.ECMShell
 
     def api_complete(self, resource, field, startswith):
         options = {}

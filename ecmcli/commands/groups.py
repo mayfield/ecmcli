@@ -133,6 +133,7 @@ class Create(base.ECMCommand):
     also manages settings such as alerts and log acquisition. """
 
     name = 'create'
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_argument('--name')
@@ -183,6 +184,8 @@ class Create(base.ECMCommand):
         self.api.post('groups', group)
 
 
+# XXX This needs a seperate mutation command so the pager can be used on the
+# reader.
 class Config(base.ECMCommand):
     """ Show or alter the group configuration.
     The configuration stored in a group consists of a patch tuple;
@@ -209,6 +212,7 @@ class Config(base.ECMCommand):
     """
 
     name = 'config'
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_group_argument()
@@ -309,6 +313,7 @@ class Delete(base.ECMCommand):
     """ Delete one or more groups. """
 
     name = 'rm'
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_group_argument('idents', nargs='+')

@@ -171,6 +171,7 @@ class Delete(base.ECMCommand):
     """ Delete an account """
 
     name = 'rm'
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_account_argument('idents', nargs='+')

@@ -12,6 +12,7 @@ class FlashLEDS(base.ECMCommand):
 
     name = 'flashleds'
     min_flash_delay = 0.200
+    use_pager = False
 
     def run(self, args):
         routers = self.api.get_pager('routers')

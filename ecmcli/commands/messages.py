@@ -27,7 +27,8 @@ class Common(object):
 
     def get_messages(self):
         """ Combine system and user message streams. """
-        messages = list(self.api.get_pager('system_message', type__nexact='tos'))
+        messages = list(self.api.get_pager('system_message',
+                                           type__nexact='tos'))
         messages.extend(self.api.get_pager('user_messages'))
         messages.sort(key=lambda x: x['created'], reverse=True)
         return messages

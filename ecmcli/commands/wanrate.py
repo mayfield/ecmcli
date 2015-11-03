@@ -12,6 +12,7 @@ class WanRate(base.ECMCommand):
 
     name = 'wanrate'
     sample_delay = 1
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_router_argument('idents', nargs='*')

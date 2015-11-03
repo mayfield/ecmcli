@@ -16,12 +16,11 @@ import time
 import tornado
 import tornado.locks
 from . import base
-4
+
 
 class DeviceSelectorsMixin(object):
     """ Add arguments used for selecting devices. """
 
-    completer_cache = {}
     search_fields = ['name', 'desc', 'mac', ('account', 'account.name'),
                      'asset_id', 'custom1', 'custom2',
                      ('group', 'group.name'),
@@ -255,7 +254,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                           complete=self.try_complete_path, default='',
                           help='Dot notation path to config value; Eg. '
                                'status.wan.rules.0.enabled')
-        self.add_file_argument('--output-file', '-o', mode='w', default='-',
+        self.add_file_argument('--output-file', '-o', mode='w',
                                metavar="OUTPUT_FILE", parser=output_options)
         self.add_argument('--repeat', type=float, metavar="SECONDS",
                           help="Repeat the request every N seconds. Only "
@@ -275,8 +274,10 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
 
     def run(self, args):
         filters = self.gen_selection_filters(args)
-        outfile = args.output_file
-        outformat = args.output or outfile.name.rsplit('.', 1)[-1]
+        outfile = args.output_file or sys.stdout
+        outformat = args.output
+        if not args.output and hasattr(outfile.name, 'rsplit'):
+            outformat = outfile.name.rsplit('.', 1)[-1]
         fallback_format = self.tree_format if not args.repeat else \
                           self.table_format
         formatter = {

@@ -6,7 +6,6 @@ alterations we make to API calls, such as filtering by router ids.
 import collections
 import collections.abc
 import fnmatch
-import getpass
 import html
 import html.parser
 import itertools
@@ -18,7 +17,6 @@ import shutil
 import syndicate
 import syndicate.client
 import syndicate.data
-import textwrap
 import tornado
 from syndicate.adapters.sync import LoginAuth
 
@@ -31,22 +29,6 @@ class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
             if isinstance(value, str):
                 data[key] = html.unescape(value)
         return data
-
-
-def text_pager(data):
-    width, height = shutil.get_terminal_size()
-    i = 0
-    for section in data:
-        lines = textwrap.wrap(section, width-4)
-        if not lines:
-            i += 1
-            print()
-        for x in lines:
-            i += 1
-            if i >= height - 2:
-                input("<Press enter to view next page>")
-                i = 0
-            print(x)
 
 
 syndicate.data.serializers['htmljson'] = syndicate.data.Serializer(
@@ -162,22 +144,20 @@ class ECMService(shellish.Eventer, syndicate.Service):
         self.uri = self.site
         self.adapter.auth = ECMLogin(url='%s%s/login/' % (self.site,
                                      self.api_prefix))
-        if username or not self.load_session(try_last=True):
+        if username:
             self.login(username, password)
+        elif not self.load_session(try_last=True):
+            raise Unauthorized('No valid sessions found')
 
     def reset_auth(self):
         self.fire_event('reset_auth')
         self.adapter.set_cookie('sessionid', None)
         self.save_session(None)
-        self.login()
+        self.ident = None
 
     def login(self, username=None, password=None):
-        try:
-            username = username or input('Username: ')
-        except RuntimeError:  # Readline (input) is not reentrant.
-            raise Unauthorized('Unable to login in this context')
         if not self.load_session(username):
-            self.set_auth(username, password or getpass.getpass())
+            self.set_auth(username, password)
 
     def set_auth(self, username, password=None, session_id=None):
         if password is not None:
@@ -231,7 +211,10 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def check_session(self):
         """ ECM sometimes updates the session token. We make sure we are in
         sync. """
-        session_id = self.adapter.get_cookie('sessionid')
+        try:
+            session_id = self.adapter.get_cookie('sessionid')
+        except KeyError:
+            session_id = None
         if session_id != self.session_id:
             self.save_session({
                 "id": session_id
@@ -242,7 +225,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
         try:
             result = result_func(*args, **kwargs)
         except BaseException as e:
-            self.fire_event('finish_request', callid, error=e)
+            self.fire_event('finish_request', callid, exc=e)
             if reraise:
                 raise e
             else:
@@ -272,9 +255,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
             self.handle_error(e)
             result = super().do(*args, **kwargs)
         except Unauthorized as e:
-            print('Auth Error:', e)
             self.reset_auth()
-            result = super().do(*args, **kwargs)
+            raise e
         self.check_session()
         return result
 
@@ -283,30 +265,14 @@ class ECMService(shellish.Eventer, syndicate.Service):
         resp = error.response
         if resp.get('exception') == 'precondition_failed' and \
            resp['message'] == 'must_accept_tos':
-            if self.accept_tos():
-                return
-            raise TOSRequired("WARNING: User did not accept terms")
+            raise TOSRequired('Must accept TOS')
         err = resp.get('exception') or resp.get('error_code')
         if err in ('login_failure', 'unauthorized'):
             self.reset_auth()
-            return
+            raise Unauthorized(err)
         if resp.get('message'):
             err += '\n%s' % resp['message'].strip()
         raise SystemExit("Error: %s" % err)
-
-    def accept_tos(self):
-        for tos in self.get_pager('system_message', type='tos'):
-            input("You must read and accept the terms of service to "
-                  "continue: <press enter>")
-            text_pager(str(shellish.htmlrender(tos['message'])).splitlines())
-            print()
-            accept = input('Type "accept" to comply with the TOS: ')
-            if accept != 'accept':
-                return False
-            self.post('system_message_confirm', {
-                "message": tos['resource_uri']
-            })
-            return True
 
     def glob_field(self, field, criteria):
         """ Convert the criteria into an API filter and test function to

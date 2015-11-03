@@ -8,6 +8,7 @@ import shellish
 import sys
 from . import api
 from .commands import base, shtools
+from shellish.command import contrib
 
 command_modules = [
     'accounts',
@@ -17,15 +18,52 @@ command_modules = [
     'flashleds',
     'gpio',
     'groups',
+    'login',
     'logs',
     'messages',
     'remote',
     'routers',
     'shell',
+    'tos',
     'trace',
     'users',
     'wanrate'
 ]
+
+
+class ECMSession(shellish.Session):
+
+    command_error_verbosity = 'pretty'
+    default_prompt_format = r': \033[7m{user}\033[0m@{site} ;\n:;'
+    intro = '\n'.join([
+        'Welcome to the ECM shell.',
+        'Type "help" or "?" to list commands and "exit" to quit.'
+    ])
+
+    def verror(self, *args, **kwargs):
+        msg = ' '.join(map(str, args))
+        shellish.vtmlprint(msg, file=sys.stderr, **kwargs)
+
+    def prompt_info(self):
+        info = super().prompt_info()
+        ident = self.root_command.api.ident
+        username = ident['user']['username'] if ident else '<not_logged_in>'
+        info.update({
+            "user": username,
+            "site": self.root_command.api.site.split('//', 1)[1]
+        })
+        return info
+
+    def execute(self, *args, **kwargs):
+        try:
+            return super().execute(*args, **kwargs)
+        except api.TOSRequired:
+            self.verror('TOS Acceptance Required')
+            input('Press <enter> to review TOS')
+            return self.root_command['tos']['accept'](argv='')
+        except api.AuthFailure as e:
+            self.verror('Auth error:' % e)
+            return self.root_command['login'](argv='')
 
 
 class ECMRoot(base.ECMCommand):
@@ -37,6 +75,8 @@ class ECMRoot(base.ECMCommand):
     https://cradlepointecm.com/. """
 
     name = 'ecm'
+    use_pager = False
+    Session = ECMSession
 
     def setup_args(self, parser):
         distro = pkg_resources.get_distribution('ecmcli')
@@ -47,32 +87,44 @@ class ECMRoot(base.ECMCommand):
         self.add_argument('--debug', action='store_true')
         self.add_argument('--version', action='version',
                           version=distro.version)
+        self.add_subcommand(contrib.SystemCompletion)
 
-    def run(self, args):
+    def prerun(self, args):
+        """ Add the interactive commands just before it goes to the prompt so they
+        don't show up in the --help from the commands line. """
         for x in shtools.command_classes:
             self.add_subcommand(x)
-        self.interact()
+        self.add_subcommand(contrib.Exit)
+        self.add_subcommand(contrib.Help)
+        self.add_subcommand(contrib.INI)
+        self.add_subcommand(contrib.Alias)
+        self.add_subcommand(contrib.Reset)
+        self.add_subcommand(contrib.Pager)
+        self.remove_subcommand(contrib.SystemCompletion)
+
+    def run(self, args):
+        self.session.run_loop()
 
 
 def main():
     try:
         _main()
-    except KeyboardInterrupt:
-        sys.exit(1)
-    except BrokenPipeError:
+    except (KeyboardInterrupt, BrokenPipeError):
         sys.exit(1)
 
 
 def _main():
     root = ECMRoot(api=api.ECMService())
-    root.add_subcommand(shellish.SystemCompletionSetup)
     for modname in command_modules:
         module = importlib.import_module('.%s' % modname, 'ecmcli.commands')
         for Command in module.command_classes:
             root.add_subcommand(Command)
-    args = root.argparser.parse_args()
+    args = root.parse_args()
     if args.debug:
-        root['trace']['enable']([])
-    root.api.connect(args.api_site, username=args.api_username,
-                     password=args.api_password)
+        root['trace']['enable'](argv='')
+    try:
+        root.api.connect(args.api_site, username=args.api_username,
+                         password=args.api_password)
+    except api.Unauthorized:
+        root['login'](argv='')
     root(args)

@@ -4,7 +4,7 @@ Analyze and Report ECM Alerts.
 
 import collections
 import humanize
-import shellish
+import sys
 from . import base
 
 
@@ -27,12 +27,12 @@ class Alerts(base.ECMCommand):
         by_type = collections.OrderedDict()
         alerts = self.api.get_pager('alerts', page_size=500,
                                     order_by='-created_ts')
-        if shellish.is_terminal():
-            msg = "\rCollecting new alerts: %5d"
-            print(msg % 0, end='', flush=True)
+        is_terminal = sys.stdout.isatty()
+        if is_terminal:
+            msg = "Collecting new alerts: %%d/%d" % alerts.meta['total_count']
+            print(msg % 0)
         for i, x in enumerate(alerts, 1):
-            if shellish.is_terminal():
-                print(msg % i, end='', flush=True)
+            print(msg % i)
             try:
                 ent = by_type[x['alert_type']]
             except KeyError:
@@ -44,8 +44,6 @@ class Alerts(base.ECMCommand):
             else:
                 ent['records'].append(x),
                 ent['oldest'] = x['created_ts']
-        if shellish.is_terminal():
-            print()
         headers = ['Alert Type', 'Count', 'Most Recent', 'Oldest']
         with self.make_table(headers=headers) as t:
             t.print((name, len(x['records']), since(x['newest']),

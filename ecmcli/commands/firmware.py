@@ -4,6 +4,7 @@ Commands for managing firmware versions of routers.
 
 import json
 import shellish
+import sys
 from . import base
 
 
@@ -84,6 +85,7 @@ class Upgrade(AvailMixin, base.ECMCommand):
     """
 
     name = 'upgrade'
+    use_pager = False
 
     def setup_args(self, parser):
         or_group = parser.add_mutually_exclusive_group(required=True)
@@ -157,7 +159,7 @@ class DTD(base.ECMCommand):
         for x in ('json', 'tree'):
             self.add_argument('--%s' % x, dest='format', action='store_const',
                               const=x, parser=output)
-        self.add_file_argument('--output-file', '-o', mode='w', default='-',
+        self.add_file_argument('--output-file', '-o', mode='w',
                                metavar="OUTPUT_FILE", parser=output)
         super().setup_args(parser)
 
@@ -189,7 +191,7 @@ class DTD(base.ECMCommand):
             shellish.vtmlprint('<red><b>WARNING:</b></red> More than one '
                                'firmware DTD found for this specification.')
         dtd = firmwares[0]['dtd']['value']
-        output = args.output_file
+        output = args.output_file or sys.stdout
         dtd = self.walk_dtd(dtd, args.path)
         if args.shallow:
             if 'nodes' in dtd:

@@ -108,6 +108,7 @@ class Delete(Common, base.ECMCommand):
     """ Delete an authorization """
 
     name = 'rm'
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_auth_argument()
@@ -145,6 +146,7 @@ class Create(Common, base.ECMCommand):
     """ Create a new authorization. """
 
     name = 'create'
+    use_pager = False
 
     def setup_args(self, parser):
         beni = parser.add_mutually_exclusive_group()

@@ -113,6 +113,7 @@ class Create(Common, base.ECMCommand):
     """ Create a new user. """
 
     name = 'create'
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_argument('--username')
@@ -202,6 +203,7 @@ class Delete(Common, base.ECMCommand):
     """ Delete a user. """
 
     name = 'rm'
+    use_pager = False
 
     def setup_args(self, parser):
         self.add_username_argument('usernames', nargs='+')
@@ -239,6 +241,7 @@ class Passwd(base.ECMCommand):
     """ Change your password. """
 
     name = 'passwd'
+    use_pager = False
 
     def run(self, args):
         user = self.api.ident['user']

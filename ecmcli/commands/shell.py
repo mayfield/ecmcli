@@ -18,6 +18,7 @@ class Shell(base.ECMCommand):
     """ Emulate an interactive shell to a remote router. """
 
     name = 'shell'
+    use_pager = False
     poll_max_retry = 300  # Max secs for polling when no activity is detected.
     # How long we wait for additional keystrokes after one or more keystrokes
     # have been detected.
@@ -37,7 +38,7 @@ class Shell(base.ECMCommand):
         sessionid = int(time.time() * 10000) if args.new else \
                     self.api.session_id
         with self.setup_tty():
-            self.session(router, sessionid)
+            self.rsh(router, sessionid)
 
     @contextlib.contextmanager
     def setup_tty(self):
@@ -81,7 +82,7 @@ class Shell(base.ECMCommand):
             select.select([], [dstfile.fileno()], [])  # block until writable
             written += dstfile.write(srcview[written:])
 
-    def session(self, router, sessionid):
+    def rsh(self, router, sessionid):
         rid = router['id']
         w_save, h_save = None, None
         res = 'remote/control/csterm/ecmcli-%s/' % sessionid
