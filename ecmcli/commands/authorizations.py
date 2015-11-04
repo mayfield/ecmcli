@@ -6,6 +6,7 @@ import collections
 import shellish
 from . import base
 
+
 class Common(object):
     """ Mixin of common stuff. """
 

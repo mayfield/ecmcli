@@ -477,7 +477,6 @@ class Set(DeviceSelectorsMixin, base.ECMCommand):
             print('%s:' % x['name'], status)
 
 
-
 class Diff(base.ECMCommand):
     """ Produce an N-way diff of a particular config-store path between any
     selection of routers. """

@@ -6,7 +6,6 @@ import code
 from . import base
 
 
-
 class Debug(base.ECMCommand):
     """ Run an interactive python interpretor. """
 
