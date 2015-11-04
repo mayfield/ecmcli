@@ -48,30 +48,44 @@ class Accept(Review):
     requirements for ECM usage. """
 
     name = 'accept'
-    use_pager = False
+    accept_arg = 'i accept the ecm terms of service'
 
     def setup_args(self, parser):
-        self.add_argument('--i-accept-the-ecm-terms-of-service',
+        self.add_argument('--%s' % self.accept_arg.replace(' ', '-'),
                           action='store_true')
 
+    def prerun(self, args):
+        self.accept = getattr(args, self.accept_arg.replace(' ', '_'), False)
+        self.use_pager = not self.accept
+
     def run(self, args):
-        tos = self.get_tos()
-        if args.i_accept_the_ecm_terms_of_service:
-            self.print_tos(tos)
-            print()
+        self.tos = self.get_tos()
+        self.print_tos(self.tos)
+
+    def postrun(self, args, result=None, exc=None):
+        if exc is not None:
+            return
+        print()
+        if self.accept:
             shellish.vtmlprint('I, %s %s (%s), do hereby accept the ECM '
                                'terms of service: <u><b>   X   </b></u>' % (
                                self.api.ident['user']['first_name'],
                                self.api.ident['user']['last_name'],
                                self.api.ident['user']['username']))
         else:
-            with shellish.pager_redirect(self.get_config('core')['pager']):
-                self.print_tos(tos)
-            print()
             accept = input('Type "accept" to comply with the TOS: ')
             if accept != 'accept':
                 raise SystemExit("Aborted")
-        self.api.post('system_message_confirm', {"message": tos['resource_uri']})
+        tos_uri = self.tos['resource_uri']
+        try:
+            self.api.post('system_message_confirm', {"message": tos_uri})
+        except SystemExit as e:
+            try:
+                if 'already exists' in e.__context__.response['message']:
+                    raise SystemExit("TOS was already accepted.")
+            except AttributeError:
+                pass
+            raise e
 
 
 class TOS(base.ECMCommand):

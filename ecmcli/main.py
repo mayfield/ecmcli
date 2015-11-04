@@ -109,7 +109,7 @@ class ECMRoot(base.ECMCommand):
 def main():
     try:
         _main()
-    except (KeyboardInterrupt, BrokenPipeError):
+    except KeyboardInterrupt:
         sys.exit(1)
 
 
