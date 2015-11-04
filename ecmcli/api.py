@@ -117,7 +117,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def clone(self, **varations):
         """ Produce a cloned instance of ourselves, including state. """
         clone = type(self)(**varations)
-        copy = ('account', 'session_id', 'username', 'ident', 'uri', 'events',
+        copy = ('account', 'session_id', 'username', 'ident', 'uri', '_events',
                 'call_count')
         for x in copy:
             value = getattr(self, x)
