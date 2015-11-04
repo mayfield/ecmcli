@@ -82,7 +82,8 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v3...HEAD
+[unreleased]: https://github.com/mayfield/ecmcli/compare/v4...HEAD
+[4]: https://github.com/mayfield/ecmcli/compare/v3...v4
 [3]: https://github.com/mayfield/ecmcli/compare/v2.4.9...v3
 [2.4.9]: https://github.com/mayfield/ecmcli/compare/v2.4.0...v2.4.9
 [2.4.0]: https://github.com/mayfield/ecmcli/compare/v2.3.0...v2.4.0
