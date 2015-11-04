@@ -2,6 +2,13 @@
 
 
 ## [Unreleased] - unreleased
+### Added
+- Terms of service command: `tos`.
+
+### Changed
+- Auth failures now break a command and require you to use the `login`
+  command to overcome them.  This is because shellish 2 uses pagers for
+  most commands.
 
 
 ## [3] - 2015-10-24
@@ -63,7 +70,7 @@
 ### Added
 - Major refactor to use shellish
 - Much improved tab completion
-- Much imporoved layout via shellish.Table
+- Much improved layout via shellish.Table
 
 
 ## [0.5.0] - 2015-07-26
