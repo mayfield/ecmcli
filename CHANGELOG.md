@@ -9,6 +9,7 @@
 - Auth failures now break a command and require you to use the `login`
   command to overcome them.  This is because shellish 2 uses pagers for
   most commands.
+- Pagers everywhere.
 
 
 ## [3] - 2015-10-24
