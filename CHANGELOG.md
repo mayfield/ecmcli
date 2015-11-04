@@ -2,6 +2,9 @@
 
 
 ## [Unreleased] - unreleased
+
+
+## [4] - 2015-11-04
 ### Added
 - Terms of service command: `tos`.
 
