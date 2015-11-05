@@ -2,6 +2,15 @@
 
 
 ## [Unreleased] - unreleased
+### Fixed
+- Remotely closed HTTP connections due to server infrastructure timeouts no
+  longer break calls.
+
+### Added
+- Set support for glob patterns.  This follows the bash style braces syntax.
+  The `users-ls` command for example:
+    users ls '{Mr,Mrs} Mayfield'
+  Wildcards in the set patterns are also valid, such as `{foo*,H?m[aA]mmm}`.
 
 
 ## [4] - 2015-11-04

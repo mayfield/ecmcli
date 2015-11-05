@@ -9,6 +9,7 @@ import fnmatch
 import html
 import html.parser
 import itertools
+import math
 import os
 import re
 import requests
@@ -102,13 +103,22 @@ class ECMService(shellish.Eventer, syndicate.Service):
     site = 'https://cradlepointecm.com'
     api_prefix = '/api/v1'
     session_file = os.path.expanduser('~/.ecm_session')
+    globs = {
+        'seq': r'\[.*\]',
+        'wild': r'[*?]',
+        'set': r'\{.*\}'
+    }
+    re_glob_matches = re.compile('|'.join('(?P<%s>%s)' % x
+                              for x in globs.items()))
+    re_glob_sep = re.compile('(%s)' % '|'.join(globs.values()))
 
     def __init__(self, **kwargs):
         super().__init__(uri='nope', urn=self.api_prefix,
                          serializer='htmljson', **kwargs)
-        a = requests.adapters.HTTPAdapter(max_retries=3)
-        self.adapter.session.mount('https://', a)
-        self.adapter.session.mount('http://', a)
+        if not self.async:
+            a = requests.adapters.HTTPAdapter(max_retries=3)
+            self.adapter.session.mount('https://', a)
+            self.adapter.session.mount('http://', a)
         self.username = None
         self.session_id = None
         self.add_events([
@@ -278,6 +288,20 @@ class ECMService(shellish.Eventer, syndicate.Service):
             err += '\n%s' % resp['message'].strip()
         raise SystemExit("Error: %s" % err)
 
+    def glob_match(self, string, pattern):
+        """ Add bash style {a,b?,c*c} set matching to fnmatch. """
+        sets = []
+        for x in self.re_glob_matches.finditer(pattern):
+            match = x.group('set')
+            if match is not None:
+                prefix = pattern[:x.start()]
+                suffix = pattern[x.end():]
+                for s in match[1:-1].split(','):
+                    sets.append(prefix + s + suffix)
+        if not sets:
+            sets = [pattern]
+        return any(fnmatch.fnmatchcase(string, x) for x in sets)
+
     def glob_field(self, field, criteria):
         """ Convert the criteria into an API filter and test function to
         further refine the fetched results.  That is, the glob pattern will
@@ -287,7 +311,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
         to reduce high latency overhead. """
         filters = {}
         try:
-            start, *globs, end = re.split(r'(\[.*\]|[\*?])', criteria)
+            start, *globs, end = self.re_glob_sep.split(criteria)
         except ValueError:
             filters['%s__exact' % field] = criteria
         else:
@@ -295,7 +319,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
                 filters['%s__startswith' % field] = start
             if end:
                 filters['%s__endswith' % field] = end
-        return filters, lambda x: fnmatch.fnmatchcase(x.get(field), criteria)
+        return filters, lambda x: self.glob_match(x.get(field), criteria)
 
     def get_by(self, selectors, resource, criteria, required=True, **options):
         if isinstance(selectors, str):
@@ -372,3 +396,114 @@ class ECMService(shellish.Eventer, syndicate.Service):
                     if any(t(x) for t in glob_tests):
                         yield x
             return glob_scrub()
+
+    def _routers_slice(self, routers, size):
+        """ Pull a slice of s3 routers out of a generator. """
+        while True:
+            page = list(itertools.islice(routers, size))
+            if not page:
+                return {}
+            idmap = dict((x['id'], x) for x in page
+                         if x['product']['series'] == 3)
+            if idmap:
+                return idmap
+
+    def remote(self, path, filters, page_size=None, ideal_requests=20,
+               max_page_size=100, **query):
+        """ Smart pager for remote data.  With page_size unset we try to
+        produce page sizes that keep the latency for each response down.
+        The target max number of requests is controlled by ideal_requests. """
+        routers = self.get_pager('routers', expand='product', **filters)
+        est_len = len(routers)
+        pager = iter(routers)
+        if page_size is None:
+            ideal_page = math.ceil(est_len / ideal_requests)
+            page_size = min(ideal_page, max_page_size)
+        server_path, *globs = self.re_glob_sep.split(path)
+        print(server_path, globs)
+
+        def scrub(base):
+            yield base
+        while True:
+            idmap = self._routers_slice(pager, page_size)
+            if not idmap:
+                break
+            for x in self.get('remote', server_path, id__in=','.join(idmap),
+                              limit=page_size, **query):
+                x['router'] = idmap[str(x['id'])]
+                yield from scrub(x)
+
+    def async_remote(self, *args, **kwargs):
+        """ Proxy control of async remote call with ioloop cleanup. """
+        ioloop = tornado.ioloop.IOLoop.current()
+        try:
+            return self._async_remote(ioloop, *args, **kwargs)
+        finally:
+            ioloop.stop()
+
+    def _async_remote(self, ioloop, path, filters, concurrency=None,
+                      timeout=None, **query):
+        results = collections.deque()
+        config = {"max_clients": concurrency}
+        page_slice = max(10, round(concurrency / 3))
+        page_concurrency = round(concurrency / page_slice) * 6
+        page_semaphore = tornado.locks.Semaphore(page_concurrency)
+        api = self.clone(async=True, request_timeout=timeout,
+                         connect_timeout=timeout, adapter_config=config)
+        pending = 1
+
+        def harvest_result(f):
+            nonlocal pending
+            pending -= 1
+            try:
+                res = f.result()[0]
+            except Exception as e:
+                res = {
+                    "success": False,
+                    "exception": type(e).__name__,
+                    "message": str(e),
+                    "id": int(f.router['id'])
+                }
+            res['router'] = f.router
+            results.append(res)
+            ioloop.stop()
+
+        @tornado.gen.coroutine
+        def add_work(f):
+            nonlocal pending
+            page_semaphore.release()
+            pending -= 1
+            for router in f.result():
+                if router['product']['series'] == 3:
+                    f = api.get('remote', path, id=router['id'])
+                    f.router = router
+                    ioloop.add_future(f, harvest_result)
+                    pending += 1
+
+        @tornado.gen.coroutine
+        def runner():
+            nonlocal pending
+
+            def get(offset):
+                nonlocal pending
+                f = api.get('routers', expand='product', limit=page_slice,
+                            offset=offset, **filters)
+                ioloop.add_future(f, add_work)
+                pending += 1
+                return f
+
+            page = yield get(0)
+            start = page.meta['limit']
+            stop = page.meta['total_count']
+            for i in range(start, stop, page_slice):
+                yield page_semaphore.acquire()
+                get(i)
+            pending -= 1
+        ioloop.add_callback(runner)
+        while True:
+            if pending:
+                ioloop.start()
+            else:
+                break
+            while results:
+                yield results.popleft()

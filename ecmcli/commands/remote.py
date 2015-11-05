@@ -82,114 +82,6 @@ class DeviceSelectorsMixin(object):
             filters['state'] = 'online'
         return filters
 
-    def routers_slice(self, routers, size):
-        """ Pull a slice of s3 routers out of a generator. """
-        while True:
-            page = list(itertools.islice(routers, size))
-            if not page:
-                return {}
-            idmap = dict((x['id'], x) for x in page
-                         if x['product']['series'] == 3)
-            if idmap:
-                return idmap
-
-    def remote(self, path, filters, page_size=None, ideal_requests=20,
-               max_page_size=100, **query):
-        """ Smart pager for remote data.  With page_size unset we try to
-        produce page sizes that keep the latency for each response down.
-        The target max number of requests is controlled by ideal_requests. """
-        routers = self.api.get_pager('routers', expand='product', **filters)
-        est_len = len(routers)
-        pager = iter(routers)
-        if page_size is None:
-            ideal_page = math.ceil(est_len / ideal_requests)
-            page_size = min(ideal_page, max_page_size)
-        while True:
-            idmap = self.routers_slice(pager, page_size)
-            if not idmap:
-                break
-            for x in self.api.get('remote', path, id__in=','.join(idmap),
-                                  limit=page_size, **query):
-                x['router'] = idmap[str(x['id'])]
-                yield x
-
-    def async_remote(self, *args, **kwargs):
-        """ Proxy control of async remote call with ioloop cleanup. """
-        ioloop = tornado.ioloop.IOLoop.current()
-        try:
-            return self._async_remote(ioloop, *args, **kwargs)
-        finally:
-            ioloop.stop()
-
-    def _async_remote(self, ioloop, path, filters, concurrency=None,
-                      timeout=None, **query):
-        results = collections.deque()
-        config = {"max_clients": concurrency}
-        page_slice = max(10, round(concurrency / 3))
-        page_concurrency = round(concurrency / page_slice) * 6
-        page_semaphore = tornado.locks.Semaphore(page_concurrency)
-        api = self.api.clone(async=True, request_timeout=timeout,
-                             connect_timeout=timeout, adapter_config=config)
-        pending = 1
-
-        def harvest_result(f):
-            nonlocal pending
-            pending -= 1
-            try:
-                res = f.result()[0]
-            except Exception as e:
-                res = {
-                    "success": False,
-                    "exception": type(e).__name__,
-                    "message": str(e),
-                    "id": int(f.router['id'])
-                }
-            res['router'] = f.router
-            results.append(res)
-            ioloop.stop()
-
-        @tornado.gen.coroutine
-        def add_work(f):
-            nonlocal pending
-            page_semaphore.release()
-            pending -= 1
-            for router in f.result():
-                if router['product']['series'] == 3:
-                    f = api.get('remote', path, id=router['id'])
-                    f.router = router
-                    ioloop.add_future(f, harvest_result)
-                    pending += 1
-
-        @tornado.gen.coroutine
-        def runner():
-            nonlocal pending
-
-            def get(offset):
-                nonlocal pending
-                f = api.get('routers', expand='product', limit=page_slice,
-                            offset=offset, **filters)
-                ioloop.add_future(f, add_work)
-                pending += 1
-                return f
-
-            page = yield get(0)
-            start = page.meta['limit']
-            stop = page.meta['total_count']
-            for i in range(start, stop, page_slice):
-                yield page_semaphore.acquire()
-                get(i)
-            pending -= 1
-
-        ioloop.add_callback(runner)
-
-        while True:
-            if pending:
-                ioloop.start()
-            else:
-                break
-            while results:
-                yield results.popleft()
-
     @shellish.ttl_cache(300)
     def completion_router_elect(self, **filters):
         """ Cached lookup of a router meeting the filters criteria to be used
@@ -279,13 +171,13 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
             tcurl = "tornado.curl_httpclient.CurlAsyncHTTPClient"
             tornado.httpclient.AsyncHTTPClient.configure(tcurl)
         if args.async:
-            feedfn = self.async_remote
+            feedfn = self.api.async_remote
             feedopts = {
                 'concurrency': args.async_concurrency,
                 'timeout': args.async_timeout
             }
         else:
-            feedfn = self.remote
+            feedfn = self.api.remote
             feedopts = {}
         with args.output_file() as f:
             if not outformat and hasattr(f.name, 'rsplit'):
@@ -459,8 +351,8 @@ class Set(DeviceSelectorsMixin, base.ECMCommand):
         except ValueError as e:
             raise SystemExit('Invalid JSON Value: %s' % e)
         for x in routers:
-            ok = self.remote('config', key.replace('.', '/'),
-                             value, id=x['id'])[0]
+            ok = self.api.remote('config', key.replace('.', '/'),
+                                 value, id=x['id'])[0]
             status = 'okay' if ok['success'] else \
                      '%s %s' % (ok['exception'], ok.get('message', ''))
             print('%s:' % x['name'], status)
