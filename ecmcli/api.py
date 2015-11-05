@@ -11,6 +11,7 @@ import html.parser
 import itertools
 import os
 import re
+import requests
 import shellish
 import shelve
 import shutil
@@ -105,6 +106,9 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def __init__(self, **kwargs):
         super().__init__(uri='nope', urn=self.api_prefix,
                          serializer='htmljson', **kwargs)
+        a = requests.adapters.HTTPAdapter(max_retries=3)
+        self.adapter.session.mount('https://', a)
+        self.adapter.session.mount('http://', a)
         self.username = None
         self.session_id = None
         self.add_events([
