@@ -159,7 +159,7 @@ class DTD(base.ECMCommand):
         for x in ('json', 'tree'):
             self.add_argument('--%s' % x, dest='format', action='store_const',
                               const=x, parser=output)
-        self.add_file_argument('--output-file', '-o', mode='w',
+        self.add_file_argument('--output-file', '-o', mode='w', default='-',
                                metavar="OUTPUT_FILE", parser=output)
         super().setup_args(parser)
 
@@ -189,23 +189,18 @@ class DTD(base.ECMCommand):
             raise SystemExit("No firmware DTD matches this specification.")
         if firmwares.meta['total_count'] > 1:
             shellish.vtmlprint('<red><b>WARNING:</b></red> More than one '
-                               'firmware DTD found for this specification.')
+                               'firmware DTD found for this specification.',
+                               file=sys.stderr)
         dtd = firmwares[0]['dtd']['value']
-        output = args.output_file or sys.stdout
-        dtd = self.walk_dtd(dtd, args.path)
-        if args.shallow:
-            if 'nodes' in dtd:
-                dtd['nodes'] = list(dtd['nodes'])
-        if args.format == 'json':
-            return self.json(dtd, file=output)
-        else:
-            return self.tree(dtd, file=output)
-
-    def tree(self, dtd, file=None):
-        shellish.treeprint(dtd)
-
-    def json(self, dtd, file=None):
-        print(json.dumps(dtd, indent=4), file=file)
+        with args.output_file() as f:
+            dtd = self.walk_dtd(dtd, args.path)
+            if args.shallow:
+                if 'nodes' in dtd:
+                    dtd['nodes'] = list(dtd['nodes'])
+            if args.format == 'json':
+                print(json.dumps(dtd, indent=4, sort_keys=True), file=f)
+            else:
+                shellish.treeprint(dtd, file=f)
 
 
 class Firmware(base.ECMCommand):

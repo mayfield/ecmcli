@@ -5,13 +5,11 @@ Get and set remote values on series 3 routers.
 import collections
 import csv
 import datetime
-import io
 import itertools
 import json
 import math
 import shellish
 import syndicate.data
-import sys
 import time
 import tornado
 import tornado.locks
@@ -254,7 +252,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                           complete=self.try_complete_path, default='',
                           help='Dot notation path to config value; Eg. '
                                'status.wan.rules.0.enabled')
-        self.add_file_argument('--output-file', '-o', mode='w',
+        self.add_file_argument('--output-file', '-o', mode='w', default='-',
                                metavar="OUTPUT_FILE", parser=output_options)
         self.add_argument('--repeat', type=float, metavar="SECONDS",
                           help="Repeat the request every N seconds. Only "
@@ -274,19 +272,9 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
 
     def run(self, args):
         filters = self.gen_selection_filters(args)
-        outfile = args.output_file or sys.stdout
         outformat = args.output
-        if not args.output and hasattr(outfile.name, 'rsplit'):
-            outformat = outfile.name.rsplit('.', 1)[-1]
         fallback_format = self.tree_format if not args.repeat else \
                           self.table_format
-        formatter = {
-            'json': self.json_format,
-            'xml': self.xml_format,
-            'csv': self.csv_format,
-            'table': self.table_format,
-            'tree': self.tree_format,
-        }.get(outformat) or fallback_format
         if args.curl:
             tcurl = "tornado.curl_httpclient.CurlAsyncHTTPClient"
             tornado.httpclient.AsyncHTTPClient.configure(tcurl)
@@ -299,12 +287,18 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         else:
             feedfn = self.remote
             feedopts = {}
-        try:
+        with args.output_file() as f:
+            if not outformat and hasattr(f.name, 'rsplit'):
+                outformat = f.name.rsplit('.', 1)[-1]
+            formatter = {
+                'json': self.json_format,
+                'xml': self.xml_format,
+                'csv': self.csv_format,
+                'table': self.table_format,
+                'tree': self.tree_format,
+            }.get(outformat) or fallback_format
             formatter(args, lambda: feedfn(args.path.replace('.', '/'),
-                                           filters, **feedopts), file=outfile)
-        finally:
-            if outfile is not sys.stdout:
-                outfile.close()
+                                           filters, **feedopts), file=f)
 
     def data_flatten(self, args, data):
         """ Flatten out the results a bit for a consistent data format. """
@@ -321,13 +315,8 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         for key, val in list(args.items()):
             if key.startswith('api_') or key.startswith('command'):
                 del args[key]
-            elif isinstance(val, io.IOBase):
-                args[key] = {
-                    "type": "file",
-                    "mode": val.mode,
-                    "encoding": val.encoding,
-                    "name": val.name
-                }
+            else:
+                args[key] = repr(val)
         return {
             "time": datetime.datetime.utcnow().isoformat(),
             "args": args,

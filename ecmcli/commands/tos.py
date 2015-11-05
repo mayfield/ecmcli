@@ -35,7 +35,7 @@ class Review(base.ECMCommand):
     def run(self, args):
         tos = self.get_tos()
         if args.download:
-            with args.download as f:
+            with args.download() as f:
                 f.write(tos['message'])
         else:
             self.print_tos(tos)
