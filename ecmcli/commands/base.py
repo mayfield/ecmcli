@@ -32,15 +32,15 @@ def toxml(data, root_tag='ecmcli'):
         except AttributeError:
             if not isinstance(obj, str) and hasattr(obj, '__iter__'):
                 obj = list(obj)
-                for value in obj:
+                for i, value in enumerate(obj, 1):
                     try:
                         array_id = value.pop('_id_')
-                    except (KeyError, AttributeError):
+                    except (TypeError, KeyError, AttributeError):
                         pass
                     else:
                         parent.setAttribute('id', array_id)
                     crawl(value, parent)
-                    if value is not obj[-1]:
+                    if i < len(obj):
                         newparent = document.createElement(parent.tagName)
                         parent.parentNode.appendChild(newparent)
                         parent = newparent
