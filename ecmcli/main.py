@@ -85,6 +85,7 @@ class ECMRoot(base.ECMCommand):
         self.add_argument('--api-site',
                           help='E.g. https://cradlepointecm.com')
         self.add_argument('--debug', action='store_true')
+        self.add_argument('--no-pager', action='store_true')
         self.add_argument('--version', action='version',
                           version=distro.version)
         self.add_subcommand(contrib.SystemCompletion)
@@ -120,6 +121,8 @@ def _main():
         for Command in module.command_classes:
             root.add_subcommand(Command)
     args = root.parse_args()
+    if args.no_pager:
+        root.session.allow_pager = False
     if args.debug:
         root['trace']['enable'](argv='')
     try:
