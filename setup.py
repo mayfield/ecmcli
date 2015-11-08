@@ -26,10 +26,9 @@ setup(
     packages=find_packages(),
     test_suite='test',
     install_requires=[
-        'syndicate==1.4.0',
+        'syndicate>=2',
         'shellish>=2',
-        'humanize',
-        'tornado>=4.2.0'
+        'humanize'
     ],
     entry_points = {
         'console_scripts': ['ecm=ecmcli.main:main'],

@@ -2,17 +2,13 @@
 Get and set remote values on series 3 routers.
 """
 
-import collections
 import csv
 import datetime
 import itertools
 import json
-import math
 import shellish
 import syndicate.data
 import time
-import tornado
-import tornado.locks
 from . import base
 
 
@@ -153,8 +149,6 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         advanced = parser.add_argument_group('advanced options')
         self.add_argument('--async', action='store_true', parser=advanced,
                           help="Asynchronous IO Mode.")
-        self.add_argument('--curl', action='store_true', parser=advanced,
-                          help="Use CURL for Asynchronous IO Mode.")
         self.add_argument('--async-concurrency', type=int, default=20,
                           parser=advanced, help='Maximum number of concurrent '
                           'connections.')
@@ -167,18 +161,14 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         outformat = args.output
         fallback_format = self.tree_format if not args.repeat else \
                           self.table_format
-        if args.curl:
-            tcurl = "tornado.curl_httpclient.CurlAsyncHTTPClient"
-            tornado.httpclient.AsyncHTTPClient.configure(tcurl)
         if args.async:
-            feedfn = self.api.async_remote
-            feedopts = {
+            remote_opts = {
+                'async': True,
                 'concurrency': args.async_concurrency,
                 'timeout': args.async_timeout
             }
         else:
-            feedfn = self.api.remote
-            feedopts = {}
+            remote_opts = {}
         with args.output_file() as f:
             if not outformat and hasattr(f.name, 'rsplit'):
                 outformat = f.name.rsplit('.', 1)[-1]
@@ -189,8 +179,8 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                 'table': self.table_format,
                 'tree': self.tree_format,
             }.get(outformat) or fallback_format
-            formatter(args, lambda: feedfn(args.path.replace('.', '/'),
-                                           filters, **feedopts), file=f)
+            feed = lambda: self.api.remote(args.path, filters, **remote_opts)
+            formatter(args, feed, file=f)
 
     def data_flatten(self, args, data):
         """ Flatten out the results a bit for a consistent data format. """
@@ -219,11 +209,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         """ Render a tree of the response data if it was successful otherwise
         return a formatted error response.  The return type is iterable. """
         if resp['success']:
-            if not isinstance(resp['data'], (dict, list)):
-                return ['<b>%s</b>' % resp['data']]
-            else:
-                return shellish.treeprint({"<data>": resp['data']},
-                                          render_only=True)
+            return shellish.treeprint(resp['data'], render_only=True)
         else:
             error = resp.get('message', resp.get('reason',
                                                  resp.get('exception')))
@@ -247,12 +233,13 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                     [x['router']['name']],
                     [x['router']['id']],
                     [status],
+                    [x.get('path', '')],
                     self.make_response_tree(x)
                 ]
                 for row in itertools.zip_longest(*feeds, fillvalue=''):
                     yield row
 
-        headers = ['Name', 'ID', 'Success', 'Response']
+        headers = ['Name', 'ID', 'Success', 'Path', 'Response']
         title = 'Remote data for: %s' % args.path
         with self.make_table(title=title, headers=headers, file=file) as t:
             t.print(cook())

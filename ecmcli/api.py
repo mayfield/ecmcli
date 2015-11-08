@@ -3,6 +3,7 @@ Some API handling code.  Predominantly this is to centralize common
 alterations we make to API calls, such as filtering by router ids.
 """
 
+import asyncio
 import collections
 import collections.abc
 import fnmatch
@@ -19,7 +20,6 @@ import shutil
 import syndicate
 import syndicate.client
 import syndicate.data
-import tornado
 from syndicate.adapters.sync import LoginAuth
 
 
@@ -131,8 +131,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def clone(self, **varations):
         """ Produce a cloned instance of ourselves, including state. """
         clone = type(self)(**varations)
-        copy = ('account', 'session_id', 'username', 'ident', 'uri', '_events',
-                'call_count')
+        copy = ('parent_account', 'session_id', 'username', 'ident', 'uri',
+                '_events', 'call_count')
         for x in copy:
             value = getattr(self, x)
             if hasattr(value, 'copy'):  # containers
@@ -154,7 +154,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def connect(self, site=None, username=None, password=None):
         if site:
             self.site = site
-        self.account = None
+        self.parent_account = None
         self.uri = self.site
         self.adapter.auth = ECMLogin(url='%s%s/login/' % (self.site,
                                      self.api_prefix))
@@ -253,16 +253,16 @@ class ECMService(shellish.Eventer, syndicate.Service):
         callid = next(self.call_count)
         self.fire_event('start_request', callid, args=args, kwargs=kwargs)
         if self.async:
-            future = self._do(*args, **kwargs)
             on_fin = lambda f: self.finish_do(callid, f.result, reraise=False)
-            tornado.ioloop.IOLoop.current().add_future(future, on_fin)
+            future = asyncio.ensure_future(self._do(*args, **kwargs))
+            future.add_done_callback(on_fin)
             return future
         else:
             return self.finish_do(callid, self._do, *args, **kwargs)
 
     def _do(self, *args, **kwargs):
-        if self.account is not None:
-            kwargs['account'] = self.account
+        if self.parent_account is not None:
+            kwargs['parentAccount'] = self.parent_account
         try:
             result = super().do(*args, **kwargs)
         except syndicate.client.ResponseError as e:
@@ -408,8 +408,46 @@ class ECMService(shellish.Eventer, syndicate.Service):
             if idmap:
                 return idmap
 
-    def remote(self, path, filters, page_size=None, ideal_requests=20,
-               max_page_size=100, **query):
+    def remote(self, path, filters, async=False, **kwargs):
+        """ Generator for remote data with globing support and smart
+        paging. """
+        path_parts =path.split('.')
+        for i, x in enumerate(path_parts):
+            if self.re_glob_sep.search(x):
+                break
+        server_path = path_parts[:i]
+        globs = path_parts[i:]
+
+        def expand_globs(base, tests, context=server_path):
+            if not tests:
+                return '.'.join(context), base
+            if isinstance(base, dict):
+                items = base.items()
+            elif isinstance(base, list):
+                items = [(str(i), x) for i, x in enumerate(base)]
+            else:
+                return
+            test = tests[0]
+            for key, val in items:
+                if self.glob_match(key, test):
+                    if len(tests) == 1:
+                        yield '.'.join(context), val
+                    else:
+                        yield from expand_globs(val, tests[1:],
+                                                context + [key])
+        remote = self.async_remote if async else self.sync_remote
+        for x in remote(server_path, filters, **kwargs):
+            if 'data' in x:
+                for path, leafdata in expand_globs(x['data'], globs):
+                    res = x.copy()
+                    res['path'] = path
+                    res['data'] = leafdata
+                    yield res
+            else:
+                yield x
+
+    def sync_remote(self, path, filters, page_size=None, ideal_requests=20,
+                    max_page_size=100, **query):
         """ Smart pager for remote data.  With page_size unset we try to
         produce page sizes that keep the latency for each response down.
         The target max number of requests is controlled by ideal_requests. """
@@ -419,37 +457,25 @@ class ECMService(shellish.Eventer, syndicate.Service):
         if page_size is None:
             ideal_page = math.ceil(est_len / ideal_requests)
             page_size = min(ideal_page, max_page_size)
-        server_path, *globs = self.re_glob_sep.split(path)
-        print(server_path, globs)
-
-        def scrub(base):
-            yield base
         while True:
             idmap = self._routers_slice(pager, page_size)
             if not idmap:
                 break
-            for x in self.get('remote', server_path, id__in=','.join(idmap),
+            for x in self.get('remote', *path, id__in=','.join(idmap),
                               limit=page_size, **query):
                 x['router'] = idmap[str(x['id'])]
-                yield from scrub(x)
+                yield x
 
-    def async_remote(self, *args, **kwargs):
-        """ Proxy control of async remote call with ioloop cleanup. """
-        ioloop = tornado.ioloop.IOLoop.current()
-        try:
-            return self._async_remote(ioloop, *args, **kwargs)
-        finally:
-            ioloop.stop()
-
-    def _async_remote(self, ioloop, path, filters, concurrency=None,
+    def async_remote(self, path, filters, concurrency=None,
                       timeout=None, **query):
+        ioloop = asyncio.get_event_loop()
         results = collections.deque()
-        config = {"max_clients": concurrency}
         page_slice = max(10, round(concurrency / 3))
         page_concurrency = round(concurrency / page_slice) * 6
-        page_semaphore = tornado.locks.Semaphore(page_concurrency)
+        page_semaphore = asyncio.Semaphore(page_concurrency, loop=ioloop)
         api = self.clone(async=True, request_timeout=timeout,
-                         connect_timeout=timeout, adapter_config=config)
+                         connect_timeout=timeout, loop=ioloop,
+                         connector_config={"limit": concurrency})
         pending = 1
 
         def harvest_result(f):
@@ -468,19 +494,18 @@ class ECMService(shellish.Eventer, syndicate.Service):
             results.append(res)
             ioloop.stop()
 
-        @tornado.gen.coroutine
         def add_work(f):
             nonlocal pending
             page_semaphore.release()
             pending -= 1
             for router in f.result():
                 if router['product']['series'] == 3:
-                    f = api.get('remote', path, id=router['id'])
+                    f = api.get('remote', *path, id=router['id'])
                     f.router = router
-                    ioloop.add_future(f, harvest_result)
+                    f.add_done_callback(harvest_result)
                     pending += 1
 
-        @tornado.gen.coroutine
+        @asyncio.coroutine
         def runner():
             nonlocal pending
 
@@ -488,21 +513,21 @@ class ECMService(shellish.Eventer, syndicate.Service):
                 nonlocal pending
                 f = api.get('routers', expand='product', limit=page_slice,
                             offset=offset, **filters)
-                ioloop.add_future(f, add_work)
+                f.add_done_callback(add_work)
                 pending += 1
                 return f
 
-            page = yield get(0)
+            page = yield from get(0)
             start = page.meta['limit']
             stop = page.meta['total_count']
             for i in range(start, stop, page_slice):
-                yield page_semaphore.acquire()
+                yield from page_semaphore.acquire()
                 get(i)
             pending -= 1
-        ioloop.add_callback(runner)
+        ioloop.create_task(runner())
         while True:
             if pending:
-                ioloop.start()
+                ioloop.run_forever()
             else:
                 break
             while results:
