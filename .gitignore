@@ -53,5 +53,8 @@ docs/_build/
 # PyBuilder
 target/
 
-# Editor(s)
+# Local files
 *.swp
+.DS_Store
+.cscope_db
+.eggs
