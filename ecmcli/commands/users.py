@@ -213,7 +213,7 @@ class Delete(Common, base.ECMCommand):
     def run(self, args):
         for user in self.get_users(args.usernames):
             if not args.force and \
-               not base.confirm('Delete user: %s' % user['username'],
+               not self.confirm('Delete user: %s' % user['username'],
                                 exit=False):
                 continue
             self.api.delete('users', user['id'])

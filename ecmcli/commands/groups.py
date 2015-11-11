@@ -3,6 +3,7 @@ Manage ECM Groups.
 """
 
 import collections
+import copy
 import difflib
 import json
 import shellish
@@ -20,11 +21,11 @@ def patch_stats(patch):
 
 
 def patch_validate(patch):
-    if not isinstance(patch, list) or len(patch) != 2:
-        raise TypeError('Patch must be a 2 item list')
+    if not isinstance(patch, (list, tuple)) or len(patch) != 2:
+        raise TypeError('Patch must be a 2 item sequence')
     for x in patch[1]:
-        if not isinstance(x, list):
-            raise TypeError('Removals must be lists')
+        if not isinstance(x, (list, tuple)):
+            raise TypeError('Removals must be sequences')
     if not isinstance(patch[0], dict):
         raise TypeError('Additions must be an dict tree')
 
@@ -184,8 +185,6 @@ class Create(base.ECMCommand):
         self.api.post('groups', group)
 
 
-# XXX This needs a seperate mutation command so the pager can be used on the
-# reader.
 class Config(base.ECMCommand):
     """ Show or alter the group configuration.
     The configuration stored in a group consists of a patch tuple;
@@ -212,78 +211,169 @@ class Config(base.ECMCommand):
     """
 
     name = 'config'
-    use_pager = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_subcommand(ConfigShow, default=True)
+        self.add_subcommand(ConfigSet)
+        self.add_subcommand(ConfigClear)
+
+
+class ConfigShow(base.ECMCommand):
+    """ Show the config patch used for a group. """
+
+    name = 'show'
 
     def setup_args(self, parser):
         self.add_group_argument()
-        edit_options = parser.add_argument_group('patch options (DANGEROUS)')
-        or_group = edit_options.add_mutually_exclusive_group()
-        self.add_argument('--patch-file', parser=or_group, help='JSON patch '
-                          'file or - to read from stdin.')
-        self.add_argument('--purge', action='store_true', parser=or_group,
-                          help='Completely remove configuration.')
-        self.add_argument('--force', '-f', action='store_true',
-                          parser=edit_options, help='Do not prompt for '
-                          'confirmation.')
-        output_options = parser.add_argument_group('output options')
-        self.add_argument('--json', action='store_true',
-                          parser=output_options)
-        self.add_argument('--output-file', '-o', parser=output_options)
+        self.add_argument('--json', action='store_true')
+        self.add_file_argument('--output-file', '-o', default='-', mode='w')
 
     def run(self, args):
         group = self.api.get_by_id_or_name('groups', args.ident,
                                            expand='configuration')
-        if args.purge or args.patch_file:
-            return self.update(group, args)
-        else:
-            return self.show(group, args)
+        adds, removes = group['configuration']
+        with args.output_file() as f:
+            if f is not sys.stdout:
+                args.json = True
+            if args.json:
+                print(json.dumps([adds, removes], indent=4), file=f)
+            else:
+                treelines = shellish.treeprint({
+                    "<additions>": adds,
+                    "<removes>": removes
+                }, render_only=True)
+                for x in treelines:
+                    print(x, file=f)
 
-    def update(self, group, args):
-        if args.purge:
-            if not args.force:
-                base.confirm('Confirm config purge of: %s' % group['name'])
-        elif args.patch_file:
-            with open(args.patch_file) as f:
+
+class ConfigSet(base.ECMCommand):
+    """ Update the config of a group. """
+
+    name = 'set'
+    use_pager = False
+
+    def setup_args(self, parser):
+        self.add_group_argument()
+        ex = parser.add_mutually_exclusive_group(required=True)
+        self.add_file_argument('--replace', metavar='PATCH_FILE', parser=ex,
+                               help='Replace entire group config.')
+        self.add_file_argument('--merge', metavar='PATCH_FILE', parser=ex,
+                               help='Merge new patch into existing group '
+                               'config.')
+        self.add_argument('--set', metavar='KEY=JSON_VALUE', parser=ex,
+                          help='Set a single value in the group config.')
+        self.add_argument('--force', '-f', action='store_true', help='Do not '
+                          'prompt for confirmation.')
+        self.add_argument('--json-diff', action='store_true', help='Show diff '
+                          'of JSON values instead of key=value tuples.')
+
+    def inplace_merge(self, dst, src):
+        """ Copy bits from src into dst. """
+        for key, val in src.items():
+            if not isinstance(val, dict) or key not in dst:
+                dst[key] = val
+            else:
+                self.inplace_merge(dst[key], src[key])
+
+    def merge(self, orig, overlay):
+        updates = copy.deepcopy(orig[0])
+        self.inplace_merge(updates, overlay[0])
+        removes = list(set(map(tuple, orig[1])) | set(map(tuple, overlay[1])))
+        return updates, removes
+
+    def run(self, args):
+        group = self.api.get_by_id_or_name('groups', args.ident,
+                                           expand='configuration')
+        cur_patch = group['configuration']
+        if args.replace:
+            with args.replace() as f:
                 patch = json.load(f)
             patch_validate(patch)
-            oldpatch = group['configuration']
-            oldjson = json.dumps(oldpatch, indent=4, sort_keys=True)
+        elif args.merge:
+            with args.merge() as f:
+                overlay = json.load(f)
+            patch_validate(overlay)
+            patch = self.merge(cur_patch, overlay)
+        elif args.set:
+            path, value = args.set.split('=', 1)
+            path = path.strip().split('.')
+            value = json.loads(value)
+            updates = copy.deepcopy(cur_patch[0])
+            offt = updates
+            for x in path[:-1]:
+                if x in offt:
+                    offt = offt[x]
+                else:
+                    offt[x] = {}
+            offt[path[-1]] = value
+            patch = [updates, cur_patch[1]]
+        patch_validate(patch)
+        if args.json_diff:
+            oldjson = json.dumps(cur_patch, indent=4, sort_keys=True)
             newjson = json.dumps(patch, indent=4, sort_keys=True)
-            old_adds = list('='.join(map(str, x))
-                            for x in base.totuples(group['configuration'][0]))
-            new_adds = list('='.join(map(str, x))
-                            for x in base.totuples(patch[0]))
+            printed = False
             for line in difflib.unified_diff(oldjson.splitlines(True),
                                              newjson.splitlines(True),
                                              fromfile='current config',
                                              tofile='proposed config', n=10):
-                print(line, end='')
-            for line in difflib.unified_diff(old_adds, new_adds, n=0):
-                if line[0] not in '-+':
-                    continue
-                print(line)
-            base.confirm('Confirm update of config of: %s' % group['name'])
+                if line.startswith('---') or line.startswith('+++'):
+                    line = '<b>%s</b>' % line
+                elif line.startswith('@@'):
+                    line = '<cyan>%s</cyan>' % line
+                elif line[0] == '-':
+                    line = '<red>%s</red>' % line
+                elif line[0] == '+':
+                    line = '<green>%s</green>' % line
+                shellish.vtmlprint(line, end='')
+                printed = True
+            if printed:
+                print()
         else:
-            raise RuntimeError('invalid call to update')
+            old_adds = dict(base.totuples(cur_patch[0]))
+            new_adds = dict(base.totuples(patch[0]))
+            old_add_keys = set(old_adds)
+            new_add_keys = set(new_adds)
+            for x in old_add_keys - new_add_keys:
+                shellish.vtmlprint('<red>Unsetting:</red> %s=%s' % (
+                                   x, old_adds[x]))
+            for x in new_add_keys - old_add_keys:
+                shellish.vtmlprint('<green>Adding:</green> %s=%s' % (
+                                   x, new_adds[x]))
+            for x in new_add_keys & old_add_keys:
+                if old_adds[x] != new_adds[x]:
+                    shellish.vtmlprint('<yellow>Changing:</yellow> %s (%s'
+                                       '<b> -> </b>%s)' % (x, old_adds[x],
+                                       new_adds[x]))
+            old_removes = set(map(tuple, cur_patch[1]))
+            new_removes = set(map(tuple, patch[1]))
+            for x in old_removes - new_removes:
+                shellish.vtmlprint('<red>Unsetting removal:</red> %s' % (
+                                   '.'.join(map(str, x))))
+            for x in new_removes - old_removes:
+                shellish.vtmlprint('<green>Adding removal:</green> %s' % (
+                                   '.'.join(map(str, x))))
+        self.confirm('Confirm update of config of: %s' % group['name'])
+        self.api.put('groups', group['id'], {"configuration": patch})
 
-    def show(self, group, args):
-        adds, removes = group['configuration']
-        if args.output_file:
-            args.json = True
-            outfd = open(args.output_file, 'w')
-        else:
-            outfd = sys.stdout
-        if args.json:
-            print(json.dumps([adds, removes], indent=4), file=outfd)
-        else:
-            treelines = shellish.treeprint({
-                "<additions>": adds,
-                "<removes>": removes
-            }, render_only=True)
-            for x in treelines:
-                print(x, file=outfd)
-        if outfd is not sys.stdout:
-            outfd.close()
+
+class ConfigClear(base.ECMCommand):
+    """ Clear the config of a group. """
+
+    name = 'clear'
+    use_pager = False
+
+    def setup_args(self, parser):
+        self.add_group_argument()
+        self.add_argument('--force', '-f', action='store_true',
+                          help='Do not prompt for confirmation.')
+
+    def run(self, args):
+        group = self.api.get_by_id_or_name('groups', args.ident,
+                                           expand='configuration')
+        if not args.force:
+            self.confirm('Confirm config clear of: %s' % group['name'])
+        self.api.put('groups', group['id'], {"configuration": [{}, []]})
 
 
 class Edit(base.ECMCommand):
@@ -323,7 +413,7 @@ class Delete(base.ECMCommand):
         for ident in args.idents:
             group = self.api.get_by_id_or_name('groups', ident)
             if not args.force and \
-               not base.confirm('Delete group: %s' % group['name'],
+               not self.confirm('Delete group: %s' % group['name'],
                                 exit=False):
                 continue
             self.api.delete('groups', group['id'])

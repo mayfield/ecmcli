@@ -131,7 +131,7 @@ class Upgrade(AvailMixin, base.ECMCommand):
             raise SystemExit("Target version matches current version")
         direction = 'down' if tofw['version'] < fromfw['version'] else 'up'
         if not args.force:
-            base.confirm('Confirm %sgrade of %s "%s" from %s to %s' % (
+            self.confirm('Confirm %sgrade of %s "%s" from %s to %s' % (
                          direction, type_, ent['name'], fromfw['version'],
                          tofw['version']))
         self.api.put(dict(target_firmware=tofw['resource_uri']),

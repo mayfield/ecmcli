@@ -134,10 +134,11 @@ class Read(Common, base.ECMCommand):
                                     replace_whitespace=False,
                                     break_on_hyphens=False))
         if ident[0] == 'usr':
-            self.api.put(res, ident[1], {"is_read": True})
-        else:
-            shellish.vtmlprint("\n<red><b>WARNING:</b> Confirming system "
-                               "messages not supported</red>")
+            if not msg['is_read']:
+                self.api.put(res, ident[1], {"is_read": True})
+        elif not msg['confirmed']:
+            self.api.post('system_message_confirm',
+                          {"message": msg['resource_uri']})
 
 
 class Messages(base.ECMCommand):

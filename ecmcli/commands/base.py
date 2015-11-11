@@ -9,14 +9,6 @@ import shellish
 from xml.dom import minidom
 
 
-def confirm(msg, exit=True):
-    if input('%s (type "yes" to confirm)? ' % msg) != 'yes':
-        if not exit:
-            return False
-        raise SystemExit('Aborted')
-    return True
-
-
 def toxml(data, root_tag='ecmcli'):
     """ Convert python container tree to xml. """
     dom = minidom.getDOMImplementation()
@@ -140,6 +132,14 @@ class ECMCommand(shellish.Command):
                     break
             resp[friendly] = offt
         return resp
+
+    def confirm(self, msg, exit=True):
+        assert not self.use_pager
+        if input('%s (type "yes" to confirm)? ' % msg) != 'yes':
+            if not exit:
+                return False
+            raise SystemExit('Aborted')
+        return True
 
     def make_searcher(self, resource, field_desc, **search_options):
         """ Return a Searcher instance for doing API based lookups.  This

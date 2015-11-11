@@ -200,7 +200,7 @@ class GroupAssign(base.ECMCommand):
                                             expand='group')
         group = self.api.get_by_id_or_name('groups', args.new_group)
         if router['group'] and not args.force:
-            base.confirm('Replace router group: %s => %s' % (
+            self.confirm('Replace router group: %s => %s' % (
                          router['group']['name'], group['name']))
         self.api.put('routers', router['id'],
                      {"group": group['resource_uri']})
@@ -274,7 +274,7 @@ class Delete(base.ECMCommand):
         for id_or_name in args.idents:
             router = self.api.get_by_id_or_name('routers', id_or_name)
             if not args.force and \
-               not base.confirm('Delete router: %s, id:%s' % (router['name'],
+               not self.confirm('Delete router: %s, id:%s' % (router['name'],
                                 router['id']), exit=False):
                 continue
             self.api.delete('routers', router['id'])
@@ -452,7 +452,7 @@ class Reboot(base.ECMCommand):
             routers = self.api.get_pager('routers')
         for x in routers:
             if not args.force and \
-               not base.confirm("Reboot %s (%s)" % (x['name'], x['id']),
+               not self.confirm("Reboot %s (%s)" % (x['name'], x['id']),
                                 exit=False):
                 continue
             print("Rebooting: %s (%s)" % (x['name'], x['id']))

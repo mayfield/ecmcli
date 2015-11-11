@@ -139,7 +139,7 @@ class Delete(Common, base.ECMCommand):
         auth = self.api.get_by('id', 'authorizations', args.authid,
                                expand='user,securitytoken,account')
         if not args.force:
-            base.confirm('Delete authorization: %s' % self.format_auth(auth))
+            self.confirm('Delete authorization: %s' % self.format_auth(auth))
         self.api.delete('authorizations', auth['id'])
 
 

@@ -190,13 +190,13 @@ class Delete(base.ECMCommand):
             if not args.force:
                 if resources:
                     r = resources
-                    base.confirm('Confirm removal of "%s" along with %d '
+                    self.confirm('Confirm removal of "%s" along with %d '
                                  'subaccounts, %d groups, %d routers and %d '
                                  'users' % (account['name'],
                                  len(r['subaccounts']), len(r['groups']),
                                  len(r['routers']), len(r['users'])))
                 else:
-                    base.confirm('Confirm account delete: %s (%s)' % (
+                    self.confirm('Confirm account delete: %s (%s)' % (
                                  account['name'], account['id']))
             if resources:
                 for res in ('users', 'routers', 'groups', 'subaccounts'):
