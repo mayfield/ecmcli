@@ -147,12 +147,10 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                           "appropriate for table format.")
 
         advanced = parser.add_argument_group('advanced options')
-        self.add_argument('--async', action='store_true', parser=advanced,
-                          help="Asynchronous IO Mode.")
-        self.add_argument('--async-concurrency', type=int, default=20,
+        self.add_argument('--concurrency', type=int, default=20,
                           parser=advanced, help='Maximum number of concurrent '
                           'connections.')
-        self.add_argument('--async-timeout', type=float, default=3600,
+        self.add_argument('--timeout', type=float, default=300,
                           parser=advanced, help='Maximum time in seconds for '
                           'each connection.')
 
@@ -161,14 +159,6 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         outformat = args.output
         fallback_format = self.tree_format if not args.repeat else \
                           self.table_format
-        if args.async:
-            remote_opts = {
-                'async': True,
-                'concurrency': args.async_concurrency,
-                'timeout': args.async_timeout
-            }
-        else:
-            remote_opts = {}
         with args.output_file() as f:
             if not outformat and hasattr(f.name, 'rsplit'):
                 outformat = f.name.rsplit('.', 1)[-1]
@@ -179,7 +169,9 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                 'table': self.table_format,
                 'tree': self.tree_format,
             }.get(outformat) or fallback_format
-            feed = lambda: self.api.remote(args.path, filters, **remote_opts)
+            feed = lambda: self.api.remote(args.path, filters,
+                                           concurrency=args.concurrency,
+                                           timeout=args.timeout)
             formatter(args, feed, file=f)
 
     def data_flatten(self, args, data):

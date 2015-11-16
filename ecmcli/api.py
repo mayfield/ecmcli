@@ -4,13 +4,13 @@ alterations we make to API calls, such as filtering by router ids.
 """
 
 import asyncio
+import cellulario
 import collections
 import collections.abc
 import fnmatch
 import html
 import html.parser
 import itertools
-import math
 import os
 import re
 import requests
@@ -408,7 +408,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
             if idmap:
                 return idmap
 
-    def remote(self, path, filters, async=False, **kwargs):
+    def remote(self, path, filters, **kwargs):
         """ Generator for remote data with globing support and smart
         paging. """
         path_parts =path.split('.')
@@ -435,8 +435,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
                     else:
                         yield from expand_globs(val, tests[1:],
                                                 context + [key])
-        remote = self.async_remote if async else self.sync_remote
-        for x in remote(server_path, filters, **kwargs):
+        for x in self.fetch_remote(server_path, filters, **kwargs):
             if 'data' in x:
                 for path, leafdata in expand_globs(x['data'], globs):
                     res = x.copy()
@@ -446,89 +445,42 @@ class ECMService(shellish.Eventer, syndicate.Service):
             else:
                 yield x
 
-    def sync_remote(self, path, filters, page_size=None, ideal_requests=20,
-                    max_page_size=100, **query):
-        """ Smart pager for remote data.  With page_size unset we try to
-        produce page sizes that keep the latency for each response down.
-        The target max number of requests is controlled by ideal_requests. """
-        routers = self.get_pager('routers', expand='product', **filters)
-        est_len = len(routers)
-        pager = iter(routers)
-        if page_size is None:
-            ideal_page = math.ceil(est_len / ideal_requests)
-            page_size = min(ideal_page, max_page_size)
-        while True:
-            idmap = self._routers_slice(pager, page_size)
-            if not idmap:
-                break
-            for x in self.get('remote', *path, id__in=','.join(idmap),
-                              limit=page_size, **query):
-                x['router'] = idmap[str(x['id'])]
-                yield x
-
-    def async_remote(self, path, filters, concurrency=None,
-                      timeout=None, **query):
-        ioloop = asyncio.get_event_loop()
-        results = collections.deque()
-        page_slice = max(10, round(concurrency / 3))
-        page_concurrency = round(concurrency / page_slice) * 6
-        page_semaphore = asyncio.Semaphore(page_concurrency, loop=ioloop)
+    def fetch_remote(self, path, filters, concurrency=None, timeout=None,
+                     **query):
+        cell = cellulario.IOCell(coord='pool')
+        if concurrency < 1:
+            raise ValueError("Concurrency less than 1")
+        page_concurrency = min(4, concurrency)
+        page_slice = max(10, round((concurrency / page_concurrency) * 1.20))
         api = self.clone(async=True, request_timeout=timeout,
-                         connect_timeout=timeout, loop=ioloop,
-                         connector_config={"limit": concurrency})
-        pending = 1
+                         connect_timeout=timeout)
 
-        def harvest_result(f):
-            nonlocal pending
-            pending -= 1
+        @cell.tier_coroutine()
+        def start(tier):
+            probe = yield from api.get('routers', limit=1, fields='id')
+            for i in range(0, probe.meta['total_count'], page_slice):
+                yield from tier.emit(i, page_slice)
+
+        @cell.tier_coroutine(source=start, pool_size=page_concurrency)
+        def get_page(tier, offset, limit):
+            page = yield from api.get('routers', expand='product',
+                                      offset=offset, limit=limit, **filters)
+            for router in page:
+                if router['product']['series'] != 3:
+                    continue
+                yield from tier.emit(router)
+
+        @cell.tier_coroutine(source=get_page, pool_size=concurrency)
+        def get_remote(tier, router):
             try:
-                res = f.result()[0]
+                res = (yield from api.get('remote', *path, id=router['id']))[0]
             except Exception as e:
                 res = {
                     "success": False,
                     "exception": type(e).__name__,
                     "message": str(e),
-                    "id": int(f.router['id'])
+                    "id": int(router['id'])
                 }
-            res['router'] = f.router
-            results.append(res)
-            ioloop.stop()
-
-        def add_work(f):
-            nonlocal pending
-            page_semaphore.release()
-            pending -= 1
-            for router in f.result():
-                if router['product']['series'] == 3:
-                    f = api.get('remote', *path, id=router['id'])
-                    f.router = router
-                    f.add_done_callback(harvest_result)
-                    pending += 1
-
-        @asyncio.coroutine
-        def runner():
-            nonlocal pending
-
-            def get(offset):
-                nonlocal pending
-                f = api.get('routers', expand='product', limit=page_slice,
-                            offset=offset, **filters)
-                f.add_done_callback(add_work)
-                pending += 1
-                return f
-
-            page = yield from get(0)
-            start = page.meta['limit']
-            stop = page.meta['total_count']
-            for i in range(start, stop, page_slice):
-                yield from page_semaphore.acquire()
-                get(i)
-            pending -= 1
-        ioloop.create_task(runner())
-        while True:
-            if pending:
-                ioloop.run_forever()
-            else:
-                break
-            while results:
-                yield results.popleft()
+            res['router'] = router
+            yield from tier.emit(res)
+        return cell
