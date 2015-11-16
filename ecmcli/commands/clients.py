@@ -13,7 +13,7 @@ class List(base.ECMCommand):
     """ Show the currently connected clients on a router. The router must be
     connected to ECM for this to work. """
 
-    name = 'clients'
+    name = 'ls'
     wifi_bw_modes = {
         0: "20",
         1: "40",
@@ -92,9 +92,7 @@ class List(base.ECMCommand):
         status = [
             self.get_wifi_rssi(client),
             '%d Mbps' % client['txrate'],
-            self.wifi_bw_modes[client['bw']] + ' Mhz',
             self.wifi_modes[client['mode']],
-            self.wifi_bands[client['radio_info']['wifi_band']] + ' Ghz'
         ]
         return ', '.join(status)
 
@@ -124,7 +122,8 @@ class List(base.ECMCommand):
             return default
         radio = client['radio_info']
         bss = radio['bss'][client['bss']]
-        return '%s <dim>(%s)</dim>' % (bss['ssid'], bss['authmode'].upper())
+        band = self.wifi_bands[client['radio_info']['wifi_band']]
+        return '%s (%s Ghz)' % (bss['ssid'], band)
 
     def run(self, args):
         if args.idents:
@@ -142,18 +141,25 @@ class List(base.ECMCommand):
                                           id__in=','.join(ids)):
             if not clients['success']:
                 continue
+            by_mac = {}
             for x in clients['data']:
                 x['router'] = ids[str(clients['id'])]
-                data.append(x)
+                if x['mac'] in by_mac:
+                    by_mac[x['mac']]['ip_addresses'].append(x['ip_address'])
+                else:
+                    x['ip_addresses'] = [x['ip_address']]
+                    by_mac[x['mac']] = x
+            data.extend(by_mac.values())
         dns_getter = self.make_dns_getter(ids)
-        headers = ['Router', 'IP Address', 'Hostname', 'MAC', 'Hardware']
-        accessors = ['router', 'ip_address', dns_getter, 'mac']
+        ip_getter = lambda x: ', '.join(sorted(x['ip_addresses'], key=len))
+        headers = ['Router', 'IP Addresses', 'Hostname', 'MAC', 'Hardware']
+        accessors = ['router', ip_getter, dns_getter, 'mac']
         if not args.verbose:
             accessors.append(self.mac_lookup_short)
         else:
             wifi_getter = self.make_wifi_getter(ids)
             headers.extend(['WiFi Status', 'WiFi AP'])
-            na = '<dim>n/a</dim>'
+            na = ''
             accessors.extend([
                 self.mac_lookup_long,
                 lambda x: self.wifi_status_acc(wifi_getter(x), na),
