@@ -29,7 +29,7 @@ setup(
         'syndicate>=2',
         'shellish>=2',
         'humanize',
-        'cellulario>=1'
+        'cellulario>=1.2'
     ],
     entry_points = {
         'console_scripts': ['ecm=ecmcli.main:main'],
