@@ -2,6 +2,12 @@
 
 
 ## [Unreleased] - unreleased
+
+
+## [5] - 2015-11-15
+### Changed
+- Using syndicate 2 and cellulario for async basis.  No more tornado.
+
 ### Fixed
 - Remotely closed HTTP connections due to server infrastructure timeouts no
   longer break calls.
@@ -91,7 +97,8 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v4...HEAD
+[unreleased]: https://github.com/mayfield/ecmcli/compare/v5...HEAD
+[5]: https://github.com/mayfield/ecmcli/compare/v4...v5
 [4]: https://github.com/mayfield/ecmcli/compare/v3...v4
 [3]: https://github.com/mayfield/ecmcli/compare/v2.4.9...v3
 [2.4.9]: https://github.com/mayfield/ecmcli/compare/v2.4.0...v2.4.9
