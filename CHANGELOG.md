@@ -2,6 +2,8 @@
 
 
 ## [Unreleased] - unreleased
+### Changed
+- Moved `routers-clients` to its own command, `clients`.
 
 
 ## [5] - 2015-11-15
