@@ -111,8 +111,8 @@ class Printer(object):
     def terse_printer(self, routers):
 
         fields = (
-            ("name", "Name"),
             ("id", "ID"),
+            ("name", "Name"),
             ("product_info", "Product"),
             ("firmware_info", "Firmware"),
             ("account_name", "Account"),
