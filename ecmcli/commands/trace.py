@@ -111,13 +111,14 @@ class Trace(base.ECMCommand):
 
     def on_command_start(self, command, args):
         command.__trace_ts = time.perf_counter()
-        args = vars(args)
+        args = vars(args).copy()
         for i in itertools.count(0):
-            if 'command%d' % i in args:
-                del args['command%d' % i]
+            if self.arg_label_fmt % i in args:
+                del args[self.arg_label_fmt % i]
             else:
                 break
-        self.tprint(command.prog, 'COMMAND RUN', args)
+        simple = ', '.join('%s<red>=</red><cyan>%s</cyan>' % x for x in args.items())
+        self.tprint(command.prog, 'COMMAND RUN', simple)
 
     def on_command_finish(self, command, args, result=None, exc=None):
         try:

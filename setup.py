@@ -27,7 +27,7 @@ setup(
     test_suite='test',
     install_requires=[
         'syndicate>=2',
-        'shellish>=2',
+        'shellish>=2.1',
         'humanize',
         'cellulario>=1.2'
     ],
