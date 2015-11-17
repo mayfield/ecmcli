@@ -411,16 +411,20 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def remote(self, path, filters, **kwargs):
         """ Generator for remote data with globing support and smart
         paging. """
-        path_parts =path.split('.')
+        path_parts = path.split('.')
+        server_path = []
+        globs = []
         for i, x in enumerate(path_parts):
             if self.re_glob_sep.search(x):
+                globs.extend(path_parts[i:])
                 break
-        server_path = path_parts[:i]
-        globs = path_parts[i:]
+            else:
+                server_path.append(x)
 
         def expand_globs(base, tests, context=server_path):
             if not tests:
-                return '.'.join(context), base
+                yield '.'.join(context), base
+                return
             if isinstance(base, dict):
                 items = base.items()
             elif isinstance(base, list):
@@ -457,7 +461,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
 
         @cell.tier_coroutine()
         def start(tier):
-            probe = yield from api.get('routers', limit=1, fields='id')
+            probe = yield from api.get('routers', limit=1, fields='id',
+                                       **filters)
             for i in range(0, probe.meta['total_count'], page_slice):
                 yield from tier.emit(i, page_slice)
 
