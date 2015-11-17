@@ -187,7 +187,8 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                 yield result
         args = vars(args).copy()
         for key, val in list(args.items()):
-            if key.startswith('api_') or key.startswith('command'):
+            if key.startswith('api_') or \
+               key.startswith(self.arg_label_fmt.split('%', 1)[0]):
                 del args[key]
             else:
                 args[key] = repr(val)
