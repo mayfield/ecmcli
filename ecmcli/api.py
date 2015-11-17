@@ -111,6 +111,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
     re_glob_matches = re.compile('|'.join('(?P<%s>%s)' % x
                               for x in globs.items()))
     re_glob_sep = re.compile('(%s)' % '|'.join(globs.values()))
+    default_remote_concurrency = 20
 
     def __init__(self, **kwargs):
         super().__init__(uri='nope', urn=self.api_prefix,
@@ -408,7 +409,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
             if idmap:
                 return idmap
 
-    def remote(self, path, filters, **kwargs):
+    def remote(self, path, **kwargs):
         """ Generator for remote data with globing support and smart
         paging. """
         path_parts = path.split('.')
@@ -439,20 +440,16 @@ class ECMService(shellish.Eventer, syndicate.Service):
                     else:
                         yield from expand_globs(val, tests[1:],
                                                 context + [key])
-        for x in self.fetch_remote(server_path, filters, **kwargs):
+        for x in self.fetch_remote(server_path, **kwargs):
             if 'data' in x:
-                for path, leafdata in expand_globs(x['data'], globs):
-                    res = x.copy()
-                    res['path'] = path
-                    res['data'] = leafdata
-                    yield res
-            else:
-                yield x
+                x['data'] = dict(expand_globs(x['data'], globs))
+            yield x
 
-    def fetch_remote(self, path, filters, concurrency=None, timeout=None,
-                     **query):
+    def fetch_remote(self, path, concurrency=None, timeout=None, **query):
         cell = cellulario.IOCell(coord='pool')
-        if concurrency < 1:
+        if concurrency is None:
+            concurrency = self.default_remote_concurrency
+        elif concurrency < 1:
             raise ValueError("Concurrency less than 1")
         page_concurrency = min(4, concurrency)
         page_slice = max(10, round((concurrency / page_concurrency) * 1.20))
@@ -462,14 +459,14 @@ class ECMService(shellish.Eventer, syndicate.Service):
         @cell.tier_coroutine()
         def start(tier):
             probe = yield from api.get('routers', limit=1, fields='id',
-                                       **filters)
+                                       **query)
             for i in range(0, probe.meta['total_count'], page_slice):
                 yield from tier.emit(i, page_slice)
 
         @cell.tier_coroutine(source=start, pool_size=page_concurrency)
         def get_page(tier, offset, limit):
             page = yield from api.get('routers', expand='product',
-                                      offset=offset, limit=limit, **filters)
+                                      offset=offset, limit=limit, **query)
             for router in page:
                 if router['product']['series'] != 3:
                     continue
