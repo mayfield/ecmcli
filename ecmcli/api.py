@@ -447,6 +447,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
             if 'data' in x:
                 x['results'] = [{"path": k, "data": v}
                                 for k, v in expand_globs(x['data'], globs)]
+                x['_data'] = x['data']
+                del x['data']
             else:
                 x['results'] = []
             yield x
