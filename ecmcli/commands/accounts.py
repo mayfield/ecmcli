@@ -264,7 +264,7 @@ class Search(Formatter, base.ECMCommand):
         super().setup_args(parser)
 
     def run(self, args):
-        results = list(self.lookup(args.search))
+        results = self.lookup(args.search)
         if not results:
             raise SystemExit("No results for: %s" % ' '.join(args.search))
         with self.table as t:

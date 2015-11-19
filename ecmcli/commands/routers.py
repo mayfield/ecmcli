@@ -175,7 +175,7 @@ class Search(Printer, base.ECMCommand):
         super().setup_args(parser)
 
     def run(self, args):
-        results = list(self.lookup(args.search, expand=self.expands))
+        results = self.lookup(args.search, expand=self.expands)
         if not results:
             raise SystemExit("No results for: %s" % ' '.join(args.search))
         self.printer(results)
