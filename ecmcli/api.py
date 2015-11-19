@@ -439,7 +439,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
             for key, val in items:
                 if self.glob_match(key, test):
                     if len(tests) == 1:
-                        yield '.'.join(context), val
+                        yield '.'.join(context + [key]), val
                     else:
                         yield from expand_globs(val, tests[1:],
                                                 context + [key])
