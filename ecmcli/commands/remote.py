@@ -2,6 +2,7 @@
 Get and set remote values on series 3 routers.
 """
 
+import collections
 import csv
 import datetime
 import itertools
@@ -147,9 +148,8 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                           "appropriate for table format.")
 
         advanced = parser.add_argument_group('advanced options')
-        self.add_argument('--concurrency', type=int, default=20,
-                          parser=advanced, help='Maximum number of concurrent '
-                          'connections.')
+        self.add_argument('--concurrency', type=int, parser=advanced,
+                          help='Maximum number of concurrent connections.')
         self.add_argument('--timeout', type=float, default=300,
                           parser=advanced, help='Maximum time in seconds for '
                           'each connection.')
@@ -169,22 +169,24 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                 'table': self.table_format,
                 'tree': self.tree_format,
             }.get(outformat) or fallback_format
-            feed = lambda: self.api.remote(args.path, filters,
+            feed = lambda: self.api.remote(args.path, timeout=args.timeout,
                                            concurrency=args.concurrency,
-                                           timeout=args.timeout)
+                                           **filters)
             formatter(args, feed, file=f)
 
-    def data_flatten(self, args, data):
+    def data_flatten(self, args, datafeed):
         """ Flatten out the results a bit for a consistent data format. """
 
         def responses():
-            for result in data:
+            for clientresult in datafeed:
+                resmap = collections.OrderedDict((x['path'], x['data'])
+                                                 for x in clientresult['results'])
+                emit = {"results": resmap}
                 for x in ('desc', 'custom1', 'custom2', 'asset_id',
                           'ip_address', 'mac', 'name', 'serial_number',
                           'state'):
-                    result[x] = result['router'].get(x)
-                result.pop('router', None)
-                yield result
+                    emit[x] = clientresult['router'].get(x)
+                yield emit
         args = vars(args).copy()
         for key, val in list(args.items()):
             if key.startswith('api_') or \
@@ -202,7 +204,9 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         """ Render a tree of the response data if it was successful otherwise
         return a formatted error response.  The return type is iterable. """
         if resp['success']:
-            return shellish.treeprint(resp['data'], render_only=True)
+            resmap = collections.OrderedDict((x['path'], x['data'])
+                                             for x in resp['results'])
+            return shellish.treeprint(resmap, render_only=True)
         else:
             error = resp.get('message', resp.get('reason',
                                                  resp.get('exception')))
@@ -226,15 +230,13 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                     [x['router']['name']],
                     [x['router']['id']],
                     [status],
-                    [x.get('path', '')],
                     self.make_response_tree(x)
                 ]
                 for row in itertools.zip_longest(*feeds, fillvalue=''):
                     yield row
 
-        headers = ['Name', 'ID', 'Success', 'Path', 'Response']
-        title = 'Remote data for: %s' % args.path
-        with self.make_table(title=title, headers=headers, file=file) as t:
+        headers = ['Name', 'ID', 'Success', 'Response']
+        with self.make_table(headers=headers, file=file) as t:
             t.print(cook())
             if worked:
                 t.print_footer('Succeeded: %d' % worked)
@@ -254,9 +256,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
                 headers = ['%s (%s)%s' % (x['router']['name'], x['id'],
                            status(x)) for x in results]
                 order = [x['id'] for x in results]
-                title = 'Remote data for: %s' % args.path
-                table = self.make_table(title=title, headers=headers,
-                                        file=file)
+                table = self.make_table(headers=headers, file=file)
             else:
                 # Align columns with the first requests ordering.
                 results.sort(key=lambda x: order.index(x['id']))
@@ -287,9 +287,8 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         if args.repeat:
             raise SystemExit('Repeat mode not supported for csv format.')
         data = list(self.data_flatten(args, results_feed())['responses'])
-        path = args.path.strip('.')
-        tuples = [[(('DATA:%s.%s' % (path, xx[0])).strip('.'), xx[1])
-                   for xx in base.totuples(x.get('data', []))]
+        tuples = [[(('DATA:%s' % xx[0]).strip('.'), xx[1])
+                   for xx in base.totuples(x.get('results', []))]
                   for x in data]
         keys = sorted(set(xx[0] for x in tuples for xx in x))
         static_fields = (
