@@ -20,6 +20,7 @@ import shutil
 import syndicate
 import syndicate.client
 import syndicate.data
+import warnings
 from syndicate.adapters.sync import LoginAuth
 
 
@@ -412,6 +413,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def remote(self, path, **kwargs):
         """ Generator for remote data with globing support and smart
         paging. """
+        if '/' in path:
+            warnings.warn("Use '.' instead of '/' for path argument.")
         path_parts = path.split('.')
         server_path = []
         globs = []
@@ -442,7 +445,10 @@ class ECMService(shellish.Eventer, syndicate.Service):
                                                 context + [key])
         for x in self.fetch_remote(server_path, **kwargs):
             if 'data' in x:
-                x['data'] = dict(expand_globs(x['data'], globs))
+                x['results'] = [{"path": k, "data": v}
+                                for k, v in expand_globs(x['data'], globs)]
+            else:
+                x['results'] = []
             yield x
 
     def fetch_remote(self, path, concurrency=None, timeout=None, **query):
@@ -453,7 +459,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
             raise ValueError("Concurrency less than 1")
         page_concurrency = min(4, concurrency)
         page_slice = max(10, round((concurrency / page_concurrency) * 1.20))
-        api = self.clone(async=True, request_timeout=timeout,
+        api = self.clone(async=True, loop=cell.loop, request_timeout=timeout,
                          connect_timeout=timeout)
 
         @cell.tier_coroutine()
