@@ -26,10 +26,10 @@ class Enable(base.ECMCommand):
             p.enabled = True
         p.session_verbosity_save = self.session.command_error_verbosity
         self.session.command_error_verbosity = 'traceback'
-        self.api.on('start_request', p.on_request_start)
-        self.api.on('finish_request', p.on_request_finish)
-        self.session.on('precmd', p.on_command_start)
-        self.session.on('postcmd', p.on_command_finish)
+        self.api.add_listener('start_request', p.on_request_start)
+        self.api.add_listener('finish_request', p.on_request_finish)
+        self.session.add_listener('precmd', p.on_command_start)
+        self.session.add_listener('postcmd', p.on_command_finish)
 
 
 class Disable(base.ECMCommand):
@@ -44,10 +44,10 @@ class Disable(base.ECMCommand):
             raise SystemExit("No tracer to disable")
         else:
             p.enabled = False
-        self.api.un('finish_request', p.on_request_finish)
-        self.api.un('start_request', p.on_request_start)
-        self.session.un('precmd', p.on_command_start)
-        self.session.un('postcmd', p.on_command_finish)
+        self.api.remove_listener('finish_request', p.on_request_finish)
+        self.api.remove_listener('start_request', p.on_request_start)
+        self.session.remove_listener('precmd', p.on_command_start)
+        self.session.remove_listener('postcmd', p.on_command_finish)
         self.session.command_error_verbosity = p.session_verbosity_save
 
 
