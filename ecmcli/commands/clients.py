@@ -124,6 +124,7 @@ class List(base.ECMCommand):
             ])
         cell = cellulario.IOCell(coord='pool')
         async_api = self.api.clone(async=True, loop=cell.loop)
+
         @cell.tier()
         def get_clients(route):
             """ Initial Cell tier for clients info. """
