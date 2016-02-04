@@ -1,0 +1,11 @@
+data:
+    image: jmayfield/ecmcli:latest
+    volumes:
+        - /root
+
+cli:
+    image: jmayfield/ecmcli:latest
+    volumes_from:
+        - data
+    stdin_open: true
+    tty: true
