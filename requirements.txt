@@ -1,0 +1,4 @@
+syndicate>=2
+shellish>=2.1
+humanize
+cellulario>=2
