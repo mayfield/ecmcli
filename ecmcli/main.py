@@ -22,13 +22,14 @@ command_modules = [
     'login',
     'logs',
     'messages',
+    'netflow',
     'remote',
     'routers',
     'shell',
     'tos',
     'trace',
     'users',
-    'wanrate'
+    'wanrate',
 ]
 
 
