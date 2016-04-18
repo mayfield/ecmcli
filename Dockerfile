@@ -1,4 +1,8 @@
-FROM python:3.5.1-onbuild
-RUN apt-get update && apt-get install -y less
-RUN python ./setup.py install
-ENTRYPOINT ecm
+FROM jmayfield/shellish
+
+COPY requirements.txt /
+RUN pip install -r /requirements.txt
+COPY . /package
+RUN cd /package && python ./setup.py install
+
+ENTRYPOINT ["ecm"]
