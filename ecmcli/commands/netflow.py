@@ -59,7 +59,7 @@ class Monitor(base.ECMCommand):
     def flow_end_acc(self, record):
         return float('%s.%s' % (record['flow.end.sec'],
                                 record['flow.end.usec']))
-j
+
 
 class Netflow(base.ECMCommand):
 
