@@ -5,6 +5,9 @@
 ### Changed
 - Moved `routers-clients` to its own command, `clients`.
 
+### Added
+- Docker support via jmayfield/ecmcli
+
 
 ## [5] - 2015-11-15
 ### Changed
