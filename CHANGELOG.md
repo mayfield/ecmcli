@@ -7,6 +7,7 @@
 
 ### Added
 - Docker support via jmayfield/ecmcli
+- Log follow mode `logs -f` for doing live tail of logs.
 
 
 ## [5] - 2015-11-15
