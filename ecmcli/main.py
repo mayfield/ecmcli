@@ -13,6 +13,7 @@ from shellish.command import contrib
 command_modules = [
     'accounts',
     'alerts',
+    'apps',
     'authorizations',
     'clients',
     'features',
@@ -94,8 +95,8 @@ class ECMRoot(base.ECMCommand):
         self.add_subcommand(contrib.SystemCompletion)
 
     def prerun(self, args):
-        """ Add the interactive commands just before it goes to the prompt so they
-        don't show up in the --help from the commands line. """
+        """ Add the interactive commands just before it goes to the prompt so
+        they don't show up in the --help from the commands line. """
         for x in shtools.command_classes:
             self.add_subcommand(x)
         self.add_subcommand(contrib.Exit)
