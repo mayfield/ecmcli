@@ -2,8 +2,8 @@
 Manage ECM Routers.
 """
 
-import humanize
 from . import base
+from .. import ui
 
 
 class Printer(object):
@@ -37,13 +37,6 @@ class Printer(object):
             self.expands = self.terse_expands
             self.printer = self.terse_printer
         super().prerun(args)
-
-    def since(self, dt):
-        """ Return humanized time since for an absolute datetime. """
-        if dt is None:
-            return ''
-        since = dt.now(tz=dt.tzinfo) - dt
-        return humanize.naturaltime(since)[:-4]
 
     def verbose_printer(self, routers):
         fields = {
@@ -81,8 +74,8 @@ class Printer(object):
             x = self.bundle_router(x)
             t = self.make_table(columns=[key_col_width, None],
                                 headers=['Router Name', x['name']])
-            x['since'] = self.since(x['state_ts'])
-            x['joined'] = self.since(x['create_ts']) + ' ago'
+            x['since'] = ui.time_since(x['state_ts'])
+            x['joined'] = ui.time_since(x['create_ts']) + ' ago'
             x['account_info'] = '%s (%s)' % (x['account']['name'],
                                              x['account']['id'])
             loc = x.get('last_known_location')

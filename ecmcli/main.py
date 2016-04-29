@@ -15,6 +15,7 @@ command_modules = [
     'alerts',
     'authorizations',
     'clients',
+    'features',
     'firmware',
     'flashleds',
     'gpio',

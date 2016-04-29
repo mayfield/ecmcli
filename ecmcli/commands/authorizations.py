@@ -106,7 +106,7 @@ class List(Common, base.ECMCommand):
 
 
 class Delete(Common, base.ECMCommand):
-    """ Delete an authorization """
+    """ Delete an authorization. """
 
     name = 'rm'
     use_pager = False
@@ -298,6 +298,7 @@ class RoleExamine(base.ECMCommand):
 
 class Roles(base.ECMCommand):
     """ View authorization roles.
+
     List the available roles in the system or examine the exact permissions
     provided by a given role. """
 
@@ -336,7 +337,13 @@ class Roles(base.ECMCommand):
 
 
 class Authorizations(base.ECMCommand):
-    """ View and edit authorizations along with managing collaborations. """
+    """ View and edit authorizations.
+
+    Authorizations control who has access to an account(s) along with the
+    role/permissions for that access.  A `collaborator` authorization may also
+    be granted to external users to provide access to local resources from
+    users outside your own purview.  This may be used for handling support or
+    other cases where you want to temporarily grant access to a 3rd party. """
 
     name = 'authorizations'
 
