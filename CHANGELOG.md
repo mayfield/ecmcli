@@ -2,12 +2,16 @@
 
 
 ## [Unreleased] - unreleased
+
+
+## [6] - 2016-04-29
 ### Changed
 - Moved `routers-clients` to its own command, `clients`.
 
 ### Added
 - Docker support via jmayfield/ecmcli
 - Log follow mode `logs -f` for doing live tail of logs.
+- Feature (binding) command.
 
 
 ## [5] - 2015-11-15
