@@ -4,6 +4,7 @@ Download router logs from ECM.
 
 import datetime
 import html
+import time
 from . import base
 
 
@@ -11,6 +12,7 @@ class Logs(base.ECMCommand):
     """ Show or clear router logs. """
 
     use_pager = False
+    max_follow_sleep = 30
     name = 'logs'
     levels = ['debug', 'info', 'warning', 'error', 'critical']
     level_colors = {
@@ -109,9 +111,12 @@ class Logs(base.ECMCommand):
     def follow(self, args, routers, table):
         lastseen = {}
         router_ids = ','.join(x['id'] for x in routers)
+        sleep = 0
         while True:
             logs = []
             for router in self.api.remote('status.log', id__in=router_ids):
+                if not router['results']:
+                    continue
                 logdata = router['results'][0]['data']
                 logdata.sort(key=lambda x: x[0])
                 lastshown = lastseen.get(router['id'])
@@ -123,15 +128,22 @@ class Logs(base.ECMCommand):
                             break
                     else:
                         raise RuntimeError("Did not find tailing edge")
-                logs.extend({
-                    "router": router['router'],
-                    "timestamp": x[0],
-                    "levelname": x[1],
-                    "source": x[2],
-                    "message": x[3] and html.unescape(x[3])
-                } for x in logdata[offt:])
-                lastseen[router['id']] = logdata[-1]
-            logs.sort(key=lambda x: x['timestamp'])
-            table.print(logs)
+                updates = logdata[offt:]
+                if updates:
+                    logs.extend({
+                        "router": router['router'],
+                        "timestamp": x[0],
+                        "levelname": x[1],
+                        "source": x[2],
+                        "message": x[3] and html.unescape(x[3])
+                    } for x in updates)
+                    lastseen[router['id']] = logdata[-1]
+            if logs:
+                logs.sort(key=lambda x: x['timestamp'])
+                table.print(logs)
+                sleep = 0
+            else:
+                sleep += 0.200
+            time.sleep(min(self.max_follow_sleep, sleep))
 
 command_classes = [Logs]
