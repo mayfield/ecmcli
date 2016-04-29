@@ -2,6 +2,11 @@
 
 
 ## [Unreleased] - unreleased
+### Added
+- Router `apps` command.
+
+### Fixed
+- Honor router args to `logs -f ROUTER...`
 
 
 ## [6] - 2016-04-29
