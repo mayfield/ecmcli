@@ -13,7 +13,8 @@ class Common(object):
 
     def add_ident_argument(self):
         self.add_argument('featureid', metavar='ID',
-                          complete=self.make_completer('featurebindings', 'id'))
+                          complete=self.make_completer('featurebindings',
+                                                       'id'))
 
 
 class List(Common, base.ECMCommand):

@@ -178,14 +178,14 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         """ Flatten out the results a bit for a consistent data format. """
 
         def responses():
-            for clientresult in datafeed:
+            for cres in datafeed:
                 resmap = collections.OrderedDict((x['path'], x['data'])
-                                                 for x in clientresult['results'])
+                                                 for x in cres['results'])
                 emit = {"results": resmap}
                 for x in ('desc', 'custom1', 'custom2', 'asset_id',
                           'ip_address', 'mac', 'name', 'serial_number',
                           'state'):
-                    emit[x] = clientresult['router'].get(x)
+                    emit[x] = cres['router'].get(x)
                 yield emit
         args = vars(args).copy()
         for key, val in list(args.items()):
