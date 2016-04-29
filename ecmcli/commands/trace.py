@@ -120,7 +120,8 @@ class Trace(base.ECMCommand):
                 del args[self.arg_label_fmt % i]
             else:
                 break
-        simple = ', '.join('%s<red>=</red><cyan>%s</cyan>' % x for x in args.items())
+        simple = ', '.join('%s<red>=</red><cyan>%s</cyan>' % x
+                           for x in args.items())
         self.tprint(command.prog, 'COMMAND RUN', simple)
 
     def on_command_finish(self, command, args, result=None, exc=None):
