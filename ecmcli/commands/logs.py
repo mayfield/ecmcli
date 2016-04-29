@@ -85,7 +85,7 @@ class Logs(base.ECMCommand):
                 None,
                 None,
             )) as table:
-                if  args.follow:
+                if args.follow:
                     self.follow(args, routers, table)
                 else:
                     self.view(args, routers, table)
@@ -108,9 +108,10 @@ class Logs(base.ECMCommand):
 
     def follow(self, args, routers, table):
         lastseen = {}
+        router_ids = ','.join(x['id'] for x in routers)
         while True:
             logs = []
-            for router in self.api.remote('status.log'):
+            for router in self.api.remote('status.log', id__in=router_ids):
                 logdata = router['results'][0]['data']
                 logdata.sort(key=lambda x: x[0])
                 lastshown = lastseen.get(router['id'])
