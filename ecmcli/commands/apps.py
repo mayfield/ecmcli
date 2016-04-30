@@ -18,6 +18,7 @@ class List(base.ECMCommand):
     name = 'ls'
     expands = (
         'account',
+        'app'
     )
 
     def setup_args(self, parser):
@@ -28,13 +29,14 @@ class List(base.ECMCommand):
         versions = self.api.get_pager(versions_res,
                                       expand=','.join(self.expands))
         fields = collections.OrderedDict((
-            ('ID', 'id'),
-            ('Created', lambda x: ui.time_since(x['created_at']) + ' ago'),
-            ('Updated', lambda x: ui.time_since(x['updated_at']) + ' ago'),
+            ('Version ID', 'id'),
+            ('App ID', lambda x: x['app'] and x['app']['id']),
+            ('Name', lambda x: x['app'] and x['app']['name']),
             ('Version', lambda x: '%d.%d' % (x['major_version'],
                                              x['minor_version'])),
+            ('Created', lambda x: ui.time_since(x['created_at']) + ' ago'),
+            ('Updated', lambda x: ui.time_since(x['updated_at']) + ' ago'),
             ('State', 'state'),
-            ('App', 'app')
         ))
         with self.make_table(headers=fields.keys(),
                              accessors=fields.values()) as t:
