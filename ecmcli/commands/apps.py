@@ -12,7 +12,31 @@ versions_res = 'router_sdk_app_versions'
 deploy_res = 'router_sdk_group_bindings'
 
 
-class List(base.ECMCommand):
+class CommonMixin(object):
+
+    def get_app(self, name_ver, **kwargs):
+        """ Get the app version object for a `name:version` identifier. """
+        name, version = name_ver.split(':', 1)
+        major, minor = version.split('.', 1)
+        app = self.api.get(versions_res, app__name=name, major_version=major,
+                           minor_version=minor, **kwargs)
+        if not app:
+            raise SystemExit("Application %s not found" % name_ver)
+        return app[0]
+
+    def add_app_argument(self, *keys, **options):
+        options.setdefault('metavar', 'APP:VERSION')
+        options.setdefault('help', 'The name:version identifier of an app '
+                           'version')
+        return self.add_argument(*keys, **options)
+
+    def app_ident(self, app_version):
+        name = app_version['app'] and app_version['app']['name']
+        return '%s:%d.%d' % (name, app_version['major_version'],
+                             app_version['minor_version'])
+
+
+class List(CommonMixin, base.ECMCommand):
     """ List uploaded router apps. """
 
     name = 'ls'
@@ -31,11 +55,8 @@ class List(base.ECMCommand):
         fields = collections.OrderedDict((
             ('Version ID', 'id'),
             ('App ID', lambda x: x['app'] and x['app']['id']),
-            ('Name', lambda x: x['app'] and x['app']['name']),
-            ('Version', lambda x: '%d.%d' % (x['major_version'],
-                                             x['minor_version'])),
+            ('App Ident', self.app_ident),
             ('Created', lambda x: ui.time_since(x['created_at']) + ' ago'),
-            ('Updated', lambda x: ui.time_since(x['updated_at']) + ' ago'),
             ('State', 'state'),
         ))
         with self.make_table(headers=fields.keys(),
@@ -43,7 +64,7 @@ class List(base.ECMCommand):
             t.print(versions)
 
 
-class Examine(base.ECMCommand):
+class Examine(CommonMixin, base.ECMCommand):
     """ Examine a specific router app. """
 
     name = 'examine'
@@ -54,14 +75,12 @@ class Examine(base.ECMCommand):
     )
 
     def setup_args(self, parser):
-        self.add_argument('appid', metavar='ID',
-                          complete=self.make_completer(versions_res, 'id'))
+        self.add_app_argument('appident')
         self.inject_table_factory()
         super().setup_args(parser)
 
     def run(self, args):
-        app = self.api.get_by('id', versions_res, args.appid,
-                              expand=','.join(self.expands))
+        app = self.get_app(args.appident, expand=','.join(self.expands))
         routers = self.api.get_pager(urn=app['routers'])
         appfields = app['app'] or {}
         with self.make_table(columns=[20, None], column_padding=1) as t:
@@ -78,7 +97,7 @@ class Examine(base.ECMCommand):
                 ('Updated', app['updated_at']),
                 ('State', '%s %s' % (app['state'],
                                      app.get('state_details') or '')),
-                ('Groups', app['groups']),
+                ('Groups', ', '.join(x['name'] for x in app['groups'])),
                 ('Routers', ', '.join(x['name'] for x in routers)),
             ])
 
@@ -124,26 +143,26 @@ class Upload(base.ECMCommand):
                 print(app.get('state_details'))
 
 
-class Remove(base.ECMCommand):
+class Remove(CommonMixin, base.ECMCommand):
     """ Remove an application version. """
 
     name = 'rm'
     use_pager = False
 
     def setup_args(self, parser):
-        self.add_argument('appid', metavar='ID',
-                          complete=self.make_completer(versions_res, 'id'))
+        self.add_app_argument('appident')
         self.add_argument('-f', '--force', action='store_true',
                           help='Do not prompt for confirmation.')
         super().setup_args(parser)
 
     def run(self, args):
+        app = self.get_app(args.appident)
         if not args.force:
-            self.confirm("Delete %s?" % args.appid)
-        self.api.delete(versions_res, args.appid)
+            self.confirm("Delete %s (%d)?" % (args.appident, app['id']))
+        self.api.delete(versions_res, app['id'])
 
 
-class Deploy(base.ECMCommand):
+class Deploy(CommonMixin, base.ECMCommand):
     """ Show and manage application deployments. """
 
     name = 'deploys'
@@ -165,29 +184,26 @@ class Deploy(base.ECMCommand):
             ('ID', 'id'),
             ('Created', lambda x: ui.time_since(x['created_at']) + ' ago'),
             ('Group', lambda x: x['group']['name']),
-            ('App', lambda x: x['app_version']['app']['name']),
-            ('Version', lambda x: '%d.%d' % (x['app_version']['major_version'],
-                                  x['app_version']['minor_version'])),
+            ('App Ident', lambda x: self.app_ident(x['app_version']))
         ))
         with self.make_table(headers=fields.keys(),
                              accessors=fields.values()) as t:
             t.print(deploys)
 
 
-class DeployInstall(base.ECMCommand):
+class DeployInstall(CommonMixin, base.ECMCommand):
     """ Install an application to a group of routers. """
 
     name = 'install'
     use_pager = False
 
     def setup_args(self, parser):
-        self.add_argument('appid', metavar='APPID',
-                          complete=self.make_completer(versions_res, 'id'))
-        self.add_group_argument('group', metavar='GROUPID')
+        self.add_app_argument('appident')
+        self.add_group_argument('group', metavar='GROUP_ID_OR_NAME')
         super().setup_args(parser)
 
     def run(self, args):
-        app = self.api.get_by('id', versions_res, args.appid)
+        app = self.get_app(args.appident)
         group = self.api.get_by_id_or_name('groups', args.group)
         self.api.post(deploy_res, {
             "app_version": app['resource_uri'],
@@ -196,23 +212,42 @@ class DeployInstall(base.ECMCommand):
         })
 
 
-class DeployRemove(base.ECMCommand):
+class DeployRemove(CommonMixin, base.ECMCommand):
     """ Remove an application from a group of routers. """
 
     name = 'rm'
     use_pager = False
 
     def setup_args(self, parser):
-        self.add_argument('deployid', metavar='DEPLOYID',
+        crit = parser.add_mutually_exclusive_group(required=True)
+        self.add_argument('--deploy-id', parser=crit, metavar='DEPLOY_ID',
                           complete=self.make_completer(deploy_res, 'id'))
+        self.add_app_argument('--app-ident', parser=crit)
+        self.add_group_argument('--group', metavar='GROUP_NAME_OR_ID',
+                                help='Only remove an app from this group')
         self.add_argument('-f', '--force', action='store_true',
                           help='Do not prompt for confirmation.')
         super().setup_args(parser)
 
     def run(self, args):
-        if not args.force:
-            self.confirm("Delete %s?" % args.deployid)
-        self.api.delete(deploy_res, args.deployid)
+        if args.deploy_id:
+            if not args.force:
+                self.confirm("Delete %s?" % args.deploy_id)
+            self.api.delete(deploy_res, args.deploy_id)
+        else:
+            app = self.get_app(args.app_ident)
+            filters = {
+                "app_version": app['id']
+            }
+            if args.group:
+                group = self.api.get_by_id_or_name('groups', args.group)
+                filters['group'] = group['id']
+            deploys = list(self.api.get_pager(deploy_res, **filters))
+            if not deploys:
+                raise SystemExit("No deploys to remove")
+            self.confirm("Delete %s?" % ', '.join(x['id'] for x in deploys))
+            for x in deploys:
+                self.api.delete(deploy_res, x['id'])
 
 
 class Apps(base.ECMCommand):
