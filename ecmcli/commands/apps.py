@@ -158,7 +158,7 @@ class Remove(CommonMixin, base.ECMCommand):
     def run(self, args):
         app = self.get_app(args.appident)
         if not args.force:
-            self.confirm("Delete %s (%d)?" % (args.appident, app['id']))
+            self.confirm("Delete %s (%s)?" % (args.appident, app['id']))
         self.api.delete(versions_res, app['id'])
 
 
@@ -245,7 +245,8 @@ class DeployRemove(CommonMixin, base.ECMCommand):
             deploys = list(self.api.get_pager(deploy_res, **filters))
             if not deploys:
                 raise SystemExit("No deploys to remove")
-            self.confirm("Delete %s?" % ', '.join(x['id'] for x in deploys))
+            if not args.force:
+                self.confirm("Delete %s?" % ', '.join(x['id'] for x in deploys))
             for x in deploys:
                 self.api.delete(deploy_res, x['id'])
 
