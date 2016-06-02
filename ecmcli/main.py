@@ -32,6 +32,7 @@ command_modules = [
     'trace',
     'users',
     'wanrate',
+    'wifi',
 ]
 
 

@@ -4,6 +4,7 @@
 ## [Unreleased] - unreleased
 ### Added
 - Router `apps` command.
+- `wifi` command for access point survey viewing and instigation.
 
 ### Fixed
 - Honor router args to `logs -f ROUTER...`
