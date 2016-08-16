@@ -159,7 +159,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         outformat = args.output
         fallback_format = self.tree_format if not args.repeat else \
                           self.table_format
-        with args.output_file() as f:
+        with args.output_file as f:
             if not outformat and hasattr(f.name, 'rsplit'):
                 outformat = f.name.rsplit('.', 1)[-1]
             formatter = {

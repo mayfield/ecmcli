@@ -192,7 +192,7 @@ class DTD(base.ECMCommand):
                                'firmware DTD found for this specification.',
                                file=sys.stderr)
         dtd = firmwares[0]['dtd']['value']
-        with args.output_file() as f:
+        with args.output_file as f:
             dtd = self.walk_dtd(dtd, args.path)
             if args.shallow:
                 if 'nodes' in dtd:

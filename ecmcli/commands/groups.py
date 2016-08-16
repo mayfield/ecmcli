@@ -233,7 +233,7 @@ class ConfigShow(base.ECMCommand):
         group = self.api.get_by_id_or_name('groups', args.ident,
                                            expand='configuration')
         adds, removes = group['configuration']
-        with args.output_file() as f:
+        with args.output_file as f:
             if f is not sys.stdout:
                 args.json = True
             if args.json:
@@ -287,11 +287,11 @@ class ConfigSet(base.ECMCommand):
                                            expand='configuration')
         cur_patch = group['configuration']
         if args.replace:
-            with args.replace() as f:
+            with args.replace as f:
                 patch = json.load(f)
             patch_validate(patch)
         elif args.merge:
-            with args.merge() as f:
+            with args.merge as f:
                 overlay = json.load(f)
             patch_validate(overlay)
             patch = self.merge(cur_patch, overlay)

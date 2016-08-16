@@ -113,7 +113,7 @@ class Upload(base.ECMCommand):
         super().setup_args(parser)
 
     def run(self, args):
-        with args.package() as f:
+        with args.package as f:
             url = self.api.uri + self.api.urn
             session = self.api.adapter.session
             del session.headers['content-type']
