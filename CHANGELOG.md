@@ -2,12 +2,16 @@
 
 
 ## [Unreleased] - unreleased
+
+
+## [7] - 2016-11-03
 ### Added
 - Router `apps` command.
 - `wifi` command for access point survey viewing and instigation.
 
 ### Fixed
-- Honor router args to `logs -f ROUTER...`
+- Honor router args to `logs -f ROUTER...`.
+- Updated syndicate lib with aiohttp fixes.
 
 
 ## [6] - 2016-04-29
@@ -113,7 +117,9 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v5...HEAD
+[unreleased]: https://github.com/mayfield/ecmcli/compare/v7...HEAD
+[7]: https://github.com/mayfield/ecmcli/compare/v6...v7
+[6]: https://github.com/mayfield/ecmcli/compare/v5...v6
 [5]: https://github.com/mayfield/ecmcli/compare/v4...v5
 [4]: https://github.com/mayfield/ecmcli/compare/v3...v4
 [3]: https://github.com/mayfield/ecmcli/compare/v2.4.9...v3
