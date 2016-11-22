@@ -7,6 +7,8 @@ dependencies:
         - "~/docker-cache"
     override:
         - "[ -e ~/docker-cache/image.tar ] && docker load -i ~/docker-cache/image.tar"
+    pre:
+        - echo NOPE
 
 test:
     override:
