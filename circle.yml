@@ -1,0 +1,14 @@
+machine:
+    services:
+        - docker
+ 
+test:
+    override:
+        - docker build -t ecmcli .
+
+deployment:
+    stage:
+        branch: master
+        commands:
+            - >
+                FOO=$BAR echo $FOO
