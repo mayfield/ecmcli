@@ -5,21 +5,20 @@ machine:
 test:
     override:
         - docker build -t ecmcli .
+    post:
+        - mkdir -p ~/docker-cache
+        - docker save $(docker images -q) -o ~/docker-cache/image.tar
 
 deployment:
     stage:
         branch: master
         commands:
             - >
-                FOO=$BAR echo $FOO
+                "FOO=$BAR echo $FOO"
 
 dependencies:
     cache_directories:
         - "~/docker-cache"
 
-    pre:
-        - [ -e ~/docker-cache/image.tar ] && docker load -i ~/docker-cache/image.tar
-
-    post:
-        - mkdir -p ~/docker-cache
-        - docker save $(docker images -q) -o ~/docker-cache/image.tar
+    override:
+        - "[ -e ~/docker-cache/image.tar ] && docker load -i ~/docker-cache/image.tar"
