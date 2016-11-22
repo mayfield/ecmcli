@@ -12,3 +12,14 @@ deployment:
         commands:
             - >
                 FOO=$BAR echo $FOO
+
+dependencies:
+    cache_directories:
+        - "~/docker-cache"
+
+    pre:
+        - [ -e ~/docker-cache/image.tar ] && docker load -i ~/docker-cache/image.tar
+
+    post:
+        - mkdir -p ~/docker-cache
+        - docker save $(docker images -q) -o ~/docker-cache/image.tar
