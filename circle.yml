@@ -2,6 +2,22 @@ machine:
     services:
         - docker
  
+dependencies:
+    cache_directories:
+        - "~/docker-cache"
+    override:
+        - "[ -e ~/docker-cache/image.tar ] && docker load -i ~/docker-cache/image.tar"
+
 test:
     override:
         - docker build -t ecmcli .
+    post:
+        - mkdir -p ~/docker-cache
+        - "docker save $(docker images -q) -o ~/docker-cache/image.tar"
+
+deployment:
+    stage:
+        branch: master
+        commands:
+            - >
+                "FOO=$BAR echo $FOO"
