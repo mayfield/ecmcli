@@ -22,4 +22,4 @@ deployment:
         branch: master
         commands:
             - >
-                "FOO=$BAR echo $FOO"
+                FOO=$BAR echo $FOO
