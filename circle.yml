@@ -9,6 +9,7 @@ dependencies:
         - |
             if [ -d ~/docker ] ; then
                 echo Using Docker Cache
+                sudo du -sk ~/docker
                 sudo mv /var/lib/docker /var/lib/docker.old
             else
                 echo WARNING: No Docker Cache Found
