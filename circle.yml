@@ -22,6 +22,8 @@ dependencies:
 test:
     override:
         - docker build -t ecmcli .
+    post:
+        - sudo rm /var/lib/docker
 
 deployment:
     stage:
