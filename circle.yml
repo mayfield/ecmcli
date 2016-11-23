@@ -8,9 +8,10 @@ dependencies:
     override:
         - |
             if [ -d ~/docker ] ; then
+                echo Using Docker Cache
                 sudo mv /var/lib/docker /var/lib/docker.old
-                sudo ln -s ~/docker /var/lib/docker
             else
+                echo WARNING: No Docker Cache Found
                 sudo mv /var/lib/docker ~/docker
             fi 
             sudo ln -s ~/docker /var/lib/docker
