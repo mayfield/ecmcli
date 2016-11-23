@@ -4,23 +4,23 @@ machine:
  
 dependencies:
     cache_directories:
-        - "~/docker-cache"
+        - "~/docker"
     override:
         - |
             if [ -d ~/docker ] ; then
                 sudo mv /var/lib/docker /var/lib/docker.old
                 sudo ln -s ~/docker /var/lib/docker
-                sudo service docker restart
-            fi
+            else
+                sudo mv /var/lib/docker ~/docker
+            fi 
+            sudo ln -s ~/docker /var/lib/docker
+            sudo service docker restart
     pre:
         - echo NOPE
 
 test:
     override:
         - docker build -t ecmcli .
-    post:
-        - mkdir -p ~/docker-cache
-        - "[ ! -d ~/docker ] && sudo service docker stop && sudo mv /var/lib/docker ~/docker"
 
 deployment:
     stage:
