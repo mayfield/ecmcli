@@ -6,7 +6,7 @@ dependencies:
     cache_directories:
         - "~/docker-cache"
     override:
-        - "[ -e ~/docker-cache/image.tar ] && docker load -i ~/docker-cache/image.tar"
+        - "[ -e ~/docker-cache/btrfs ] && sudo ln ~/docker-cache/btrfs /var/lib/docker/btrfs || true"
     pre:
         - echo NOPE
 
@@ -15,7 +15,7 @@ test:
         - docker build -t ecmcli .
     post:
         - mkdir -p ~/docker-cache
-        - "docker save $(docker images -q) -o ~/docker-cache/image.tar"
+        - "sudo mv /var/lib/docker/btrfs ~/docker-cache/btrfs"
 
 deployment:
     stage:
