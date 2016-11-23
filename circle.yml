@@ -6,7 +6,12 @@ dependencies:
     cache_directories:
         - "~/docker-cache"
     override:
-        - "[ -d ~/docker-cache/btrfs ] && sudo ln ~/docker-cache/btrfs /var/lib/docker/btrfs || true"
+        - |
+            if [ -d ~/docker ] ; then
+                sudo mv /var/lib/docker /var/lib/docker.old
+                sudo ln -s ~/docker /var/lib/docker
+                sudo service docker restart
+            fi
     pre:
         - echo NOPE
 
@@ -15,11 +20,10 @@ test:
         - docker build -t ecmcli .
     post:
         - mkdir -p ~/docker-cache
-        - "sudo service docker stop && sudo mv /var/lib/docker/btrfs ~/docker-cache/btrfs"
+        - "[ ! -d ~/docker ] && sudo service docker stop && sudo mv /var/lib/docker ~/docker"
 
 deployment:
     stage:
         branch: master
         commands:
-            - >
-                FOO=$BAR echo $FOO
+            - FOO=$BAR echo Hello $FOO World $BAR
