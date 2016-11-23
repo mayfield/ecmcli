@@ -26,4 +26,4 @@ deployment:
     stage:
         branch: master
         commands:
-            - FOO=$BAR echo Hello $FOO World $BAR
+            - FOO=${BAR} echo Hello ${FOO} World ${BAR}
