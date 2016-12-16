@@ -93,6 +93,7 @@ class ECMRoot(base.ECMCommand):
         self.add_argument('--no-pager', action='store_true')
         self.add_argument('--version', action='version',
                           version=distro.version)
+        self.add_subcommand(contrib.Tree)
         self.add_subcommand(contrib.SystemCompletion)
 
     def prerun(self, args):
