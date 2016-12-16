@@ -1,0 +1,34 @@
+machine:
+    services:
+        - docker
+ 
+dependencies:
+    cache_directories:
+        - "~/docker"
+    override:
+        - |
+            if [ -d ~/docker ] ; then
+                echo Using Docker Cache
+                sudo du -sk ~/docker
+                sudo mv /var/lib/docker /var/lib/docker.old
+            else
+                echo WARNING: No Docker Cache Found
+                sudo mv /var/lib/docker ~/docker
+            fi 
+            sudo ln -s ~/docker /var/lib/docker
+            sudo service docker restart
+    pre:
+        - echo NOPE
+
+test:
+    override:
+        - docker build -t ecmcli .
+    post:
+        - sudo rm /var/lib/docker
+
+deployment:
+    stage:
+        branch: master
+        commands:
+            - >
+                FOO=$BAR echo Hello $FOO World $BAR
