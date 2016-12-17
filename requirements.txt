@@ -2,4 +2,4 @@ syndicate>=2.1.2
 shellish>=3
 humanize
 cellulario>=2
-dateutil
+python_dateutil
