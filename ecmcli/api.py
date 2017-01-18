@@ -21,7 +21,7 @@ import syndicate
 import syndicate.client
 import syndicate.data
 import warnings
-from syndicate.adapters.sync import LoginAuth
+from syndicate.adapters.sync import LoginAuth, SyncPager
 
 
 class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
@@ -99,6 +99,41 @@ class ECMLogin(LoginAuth):
         return request
 
 
+class AberrantPager(SyncPager):
+    """ The time-series resources in ECM have broken paging.  limit and offset
+    mean different things, next is erroneous and total_count is a lie. """
+
+    def __init__(self, getter, path, kwargs):
+        self._limit = kwargs.pop('limit')
+        self._offset = kwargs.pop('offset', 0)
+        self._done = False
+        super().__init__(getter, path, kwargs)
+
+    def __len__(self):
+        """ Count is not supported but we'd like to support truthy tests
+        still. """
+        return 0 if self._done else 1
+
+    def _get_next_page(self):
+        assert not self._done, 'iterator exhausted'
+        page = self.getter(*self.path, limit=self._limit,
+                           offset=self._offset, **self.kwargs)
+        size = len(page)
+        if not size:
+            self._done = True
+            raise StopIteration()
+        self._offset += size
+        self._limit += size
+        return page
+
+    def __next__(self):
+        if self._done:
+            raise StopIteration()
+        if not self.page:
+            self.page = self._get_next_page()
+        return self.page.pop(0)
+
+
 class ECMService(shellish.Eventer, syndicate.Service):
 
     site = 'https://cradlepointecm.com'
@@ -113,6 +148,11 @@ class ECMService(shellish.Eventer, syndicate.Service):
                               for x in globs.items()))
     re_glob_sep = re.compile('(%s)' % '|'.join(globs.values()))
     default_remote_concurrency = 20
+    # Resources that don't page correctly.
+    aberrant_pager_resources = {
+        'router_alerts',
+        'activity_logs',
+    }
 
     def __init__(self, **kwargs):
         super().__init__(uri='nope', urn=self.api_prefix,
@@ -498,3 +538,14 @@ class ECMService(shellish.Eventer, syndicate.Service):
         def close():
             api.close()
         return cell
+
+    def get_pager(self, *path, **kwargs):
+        resource = path[0].split('/', 1)[0]
+        if resource in self.aberrant_pager_resources:
+            assert not self.async, 'Only sync mode supported for: %s' % resource
+            page_arg = kwargs.pop('page_size', None)
+            limit_arg = kwargs.pop('limit', None)
+            kwargs['limit'] = page_arg or limit_arg or self.default_page_size
+            return AberrantPager(self.get, path, kwargs)
+        else:
+            return super().get_pager(*path, **kwargs)
