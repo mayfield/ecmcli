@@ -12,6 +12,7 @@ from shellish.command import contrib
 
 command_modules = [
     'accounts',
+    'activities',
     'alerts',
     'apps',
     'authorizations',
