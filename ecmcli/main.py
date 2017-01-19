@@ -12,7 +12,7 @@ from shellish.command import contrib
 
 command_modules = [
     'accounts',
-    'activities',
+    'activity_log',
     'alerts',
     'apps',
     'authorizations',
@@ -105,7 +105,6 @@ class ECMRoot(base.ECMCommand):
         self.add_subcommand(contrib.Exit)
         self.add_subcommand(contrib.Help)
         self.add_subcommand(contrib.INI)
-        self.add_subcommand(contrib.Alias)
         self.add_subcommand(contrib.Reset)
         self.add_subcommand(contrib.Pager)
         self.remove_subcommand(contrib.SystemCompletion)
