@@ -70,11 +70,11 @@ class List(base.ECMCommand):
         kind = actor_types[itype]
         if kind == 'user':
             user = self.api.get('users', str(id))
-            return 'user: <cyan>%s %s</cyan> (%d)' % (user['first_name'],
+            return '<i>(user)</i> %s %s (%d)' % (user['first_name'],
                 user['last_name'], id)
         elif kind == 'router':
             router = self.api.get('routers', str(id))
-            return 'router: <blue>%s</blue> (%d)' % (router['name'], id)
+            return '<i>(router)</i> %s (%d)' % (router['name'], id)
         else:
             raise TypeError("unsupported actor: %s" % kind)
 
@@ -97,11 +97,11 @@ class List(base.ECMCommand):
         return fn
 
     def handle_request(self, row):
-        return '{actor[username]} ({actor[id]}) {operation[name]} of ' \
-            '{object[name]} ({object[id]})'.format(**row['attributes'])
+        return '<b>{actor[username]} ({actor[id]})</b> {operation[name]} of ' \
+            '<blue>{object[name]} ({object[id]})</blue>' \
+            .format(**row['attributes'])
 
-    def handle_update(self, row):
-        # XXX handle updates and deletes (probably one log per update)
+    def handle_update_details(self, row):
         attrs = row['attributes']
         if attrs['actor'] == attrs['object']:
             src = 'local-device'
@@ -112,24 +112,62 @@ class List(base.ECMCommand):
         updates.extend(('.'.join(map(str, x)), '<red><i>DELETED</i></red>')
                        for x in attrs['diff']['target_config'][1])
         pretty_updates = ', '.join('%s=<b><i>%s</i></b>' % x for x in updates)
-        return 'Config changed by <b>%s</b> on <b>%s</b>: <blue>%s</blue>' % (src, dst, pretty_updates)
+        return 'Config changed by <b>%s</b> on <b>%s</b>: <blue>%s</blue>' % (
+            src, dst, pretty_updates)
+
+    def handle_update_diff(self, row):
+        attrs = row['attributes']
+        if attrs['actor'] == attrs['object']:
+            src = 'local-device'
+        else:
+            src = self.get_actor(row['actor_type'], row['actor_id'])
+        dst = '%s (%s)' % (attrs['object']['name'], attrs['object']['id'])
+        updates = len(list(base.totuples(attrs['diff']['target_config'][0])))
+        removals = len(attrs['diff']['target_config'][1])
+        stat = []
+        if updates:
+            stat.append('<cyan>+%d</cyan>' % updates)
+        if removals:
+            stat.append('<magenta>-%d</magenta>' % removals)
+        return 'Config changed by <b>%s</b> on <blue>%s</blue>: <b>%s</b> differences' % (
+            src, dst, '/'.join(stat))
 
     def handle_login(self, row):
-        return '{actor[username]} ({actor[id]}) logged <green>IN</green>'.format(**row['attributes'])
+        return '<b>{actor[username]} ({actor[id]})</b> logged into ECM' \
+            .format(**row['attributes'])
 
     def handle_logout(self, row):
-        return '{actor[username]} ({actor[id]}) logged <red>OUT</red>'.format(**row['attributes'])
+        return '<b>{actor[username]} ({actor[id]})</b> logged out of ECM' \
+            .format(**row['attributes'])
+
+    def handle_fw_report(self, row):
+        fw = row['attributes']['after']['actual_firmware']
+        return '{actor[name]} ({actor[id]}) firmware upgraded to ' \
+            '<blue><b>{fw[version]}</b></blue>' \
+            .format(fw=fw, **row['attributes'])
+
+    def handle_register(self, row):
+        attrs = row['attributes']
+        if attrs['actor'] == attrs['object']:
+            src = 'local-device'
+        else:
+            # XXX Never seen before, but is probably some sort of insecure
+            # activation thing and not a router or user.
+            raise NotImplementedError(str(attrs['actor']))
+        router = '%s (%s)' % (attrs['object']['name'], attrs['object']['id'])
+        return 'Router registered by <b>%s</b>: <blue>%s</blue>' % (src,
+            router)
 
     def parse_activity(self, row):
         handlers = {
             1: self.unhandled("create"),
             2: self.unhandled("delete"),
-            3: self.handle_update,
+            3: self.handle_update_diff,
             4: self.handle_request,
-            5: self.unhandled("report"),
+            5: self.handle_fw_report,
             6: self.handle_login,
             7: self.handle_logout,
-            8: self.unhandled("register"),
+            8: self.handle_register,
             9: self.unhandled("unregister"),
             10: self.unhandled("activate"),
         }
@@ -137,9 +175,6 @@ class List(base.ECMCommand):
 
     def run(self, args):
         fields = collections.OrderedDict((
-            ('Actor', lambda x: self.get_actor(x['actor_type'], x['actor_id'])),
-            ('Activity Type', lambda x: activity_types[x['activity_type']]),
-            ('Object', lambda x: self.get_object(x['object_type'], x['object_id'])),
             ('Activity', self.parse_activity),
             ('Time', lambda x: ui.formatdatetime(ui.localize_dt(x['created_at'])))
         ))
