@@ -19,8 +19,6 @@ command_modules = [
     'clients',
     'features',
     'firmware',
-    'flashleds',
-    'gpio',
     'groups',
     'login',
     'logs',

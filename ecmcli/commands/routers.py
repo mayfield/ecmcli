@@ -2,6 +2,7 @@
 Manage ECM Routers.
 """
 
+import time
 from . import base
 from .. import ui
 
@@ -295,6 +296,51 @@ class Reboot(base.ECMCommand):
             self.api.put('remote', '/control/system/reboot', 1, id=x['id'])
 
 
+class FlashLEDS(base.ECMCommand):
+    """ Flash the LEDs of online routers. """
+
+    name = 'flashleds'
+    min_flash_delay = 0.200
+    use_pager = False
+
+    def setup_args(self, parser):
+        self.add_router_argument('idents', nargs='*')
+        self.add_argument('--duration', '-d', type=float, default=60,
+                          help='Duration in seconds for LED flashing.')
+
+    def run(self, args):
+        if args.idents:
+            routers = [self.api.get_by_id_or_name('routers', r)
+                       for r in args.idents]
+        else:
+            routers = self.api.get_pager('routers')
+        ids = []
+        print("Flashing LEDS for:")
+        for rinfo in routers:
+            print("    %s (%s)" % (rinfo['name'], rinfo['id']))
+            ids.append(rinfo['id'])
+        rfilter = {
+            "id__in": ','.join(ids)
+        }
+        leds = dict.fromkeys((
+            "LED_ATTENTION",
+            "LED_SS_1",
+            "LED_SS_2",
+            "LED_SS_3",
+            "LED_SS_4"
+        ), 0)
+        print()
+        start = time.time()
+        while time.time() - start < args.duration:
+            for k, v in leds.items():
+                leds[k] = state = not v
+            step = time.time()
+            self.api.put('remote', '/control/gpio', leds, **rfilter)
+            print("\rLEDS State: %s" % ('ON ' if state else 'OFF'), end='',
+                  flush=True)
+            time.sleep(max(0, self.min_flash_delay - (time.time() - step)))
+
+
 class Routers(base.ECMCommand):
     """ Manage ECM Routers. """
 
@@ -310,5 +356,6 @@ class Routers(base.ECMCommand):
         self.add_subcommand(GroupUnassign)
         self.add_subcommand(Delete)
         self.add_subcommand(Reboot)
+        self.add_subcommand(FlashLEDS)
 
 command_classes = [Routers]
