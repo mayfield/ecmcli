@@ -540,7 +540,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
         return cell
 
     def get_pager(self, *path, **kwargs):
-        resource = path[0].split('/', 1)[0]
+        resource = path[0].split('/', 1)[0] if path else None
         if resource in self.aberrant_pager_resources:
             assert not self.async, 'Only sync mode supported for: %s' % resource
             page_arg = kwargs.pop('page_size', None)
