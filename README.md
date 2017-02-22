@@ -18,7 +18,6 @@ interact with Cradlepoint's ECM service.  Commands are subtasks of the
 ECM utility.  The full list of subtasks are visible by running 'ecm --help'.
 
 
-
 Walkthrough Video
 --------
 [![Walkthrough Video](http://share.gifyoutube.com/y7nLaZ.gif)](http://www.youtube.com/watch?v=fv4dWL03zPk)
