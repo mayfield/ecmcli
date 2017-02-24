@@ -4,6 +4,11 @@
 ## [Unreleased] - unreleased
 
 
+## [8] - 2017-02-23
+### Added
+- Activity log
+
+
 ## [7.1] - 2016-11-05
 ### Fixed
 - Update syndicate requirement for mandatory fix with new aiohttp.
@@ -122,7 +127,8 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v7.1...HEAD
+[unreleased]: https://github.com/mayfield/ecmcli/compare/v8...HEAD
+[8]: https://github.com/mayfield/ecmcli/compare/v7.1...v8
 [7.1]: https://github.com/mayfield/ecmcli/compare/v7...v7.1
 [7]: https://github.com/mayfield/ecmcli/compare/v6...v7
 [6]: https://github.com/mayfield/ecmcli/compare/v5...v6
