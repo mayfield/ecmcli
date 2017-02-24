@@ -3,6 +3,10 @@
 
 ## [Unreleased] - unreleased
 
+## [8.1] - 2017-02-23
+### Fixed
+- Release fixes
+
 
 ## [8] - 2017-02-23
 ### Added
