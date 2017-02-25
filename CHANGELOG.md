@@ -3,6 +3,15 @@
 ## [Unreleased] - unreleased
 
 
+## [9.1] - 2017-02-25
+### Fixed
+- Docstring correction for firmwares command.
+
+### Changed
+- Use shellish version with case-insensitive search.
+- Add **Total Routers** footer to `routers ls`.
+
+
 ## [9] - 2017-02-25
 ### Added
 - Beta support for SSO login
@@ -136,7 +145,8 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v9...HEAD
+[unreleased]: https://github.com/mayfield/ecmcli/compare/v9.1...HEAD
+[9.1]: https://github.com/mayfield/ecmcli/compare/v9...v9.1
 [9]: https://github.com/mayfield/ecmcli/compare/v8.1...v9
 [8.1]: https://github.com/mayfield/ecmcli/compare/v8...v8.1
 [8]: https://github.com/mayfield/ecmcli/compare/v7.1...v8
