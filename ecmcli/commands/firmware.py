@@ -204,7 +204,7 @@ class DTD(base.ECMCommand):
 
 
 class Firmware(base.ECMCommand):
-    """ Manage ECM Routers. """
+    """ Manage ECM Firmware. """
 
     name = 'firmware'
 
