@@ -71,9 +71,10 @@ class ECMLogin(LoginAuth):
             "password": password
         }))
 
-    def use_session(self, session_id):
+    def use_session(self, id, jwt):
         self.session_mode = True
-        self.initial_session_id = session_id
+        self.initial_session_id = id
+        self.initial_session_jwt = jwt
 
     def check_login_response(self):
         super().check_login_response()
@@ -91,11 +92,57 @@ class ECMLogin(LoginAuth):
         if self.session_mode:
             if self.initial_session_id:
                 self.reset(request)
-                request.prepare_cookies({"sessionid": self.initial_session_id})
+                request.prepare_cookies({
+                    "sessionid": self.initial_session_id,
+                    "cpAccountsJwt": self.initial_session_jwt
+                })
                 self.initial_session_id = None
+                self.initial_session_jwt = None
         elif self.login is None:
             self.reset(request)
             return super().__call__(request)
+        return request
+
+
+class ECMSSOLogin(ECMLogin):
+
+    sso_url = 'https://accounts.cradlepointecm.com/login'
+
+    def __init__(self, site=None):
+        self._site = site
+        super().__init__(None)
+
+    def use_login(self, username, password):
+        self._username = username
+        self._password = password
+        super().use_login(username, password)
+
+    def check_login_response(self):
+        LoginAuth.check_login_response(self)
+
+    def __call__(self, request):
+        if self.session_mode:
+            if self.initial_session_id:
+                self.reset(request)
+                request.prepare_cookies({
+                    "sessionid": self.initial_session_id,
+                    "cpAccountsJwt": self.initial_session_jwt
+                })
+                self.initial_session_id = None
+                self.initial_session_jwt = None
+        elif self.login is None:
+            self.reset(request)
+            rs = requests.Session()
+            rs.post(self.sso_url, data={
+                "username": self._username,
+                "password": self._password,
+            }, allow_redirects=False)
+            self.login = rs.get('%s/api/v1/products?limit=1' % self._site)
+            self.check_login_response()
+            request.prepare_cookies({
+                "cpAccountsJwt": rs.cookies['cpAccountsJwt'],
+                "sessionid": self.login.cookies['sessionid']
+            })
         return request
 
 
@@ -198,8 +245,9 @@ class ECMService(shellish.Eventer, syndicate.Service):
             self.site = site
         self.parent_account = None
         self.uri = self.site
-        self.adapter.auth = ECMLogin(url='%s%s/login/' % (self.site,
-                                     self.api_prefix))
+        self.adapter.auth = ECMSSOLogin(site=self.site)
+        #self.adapter.auth = ECMLogin(url='%s%s/login/' % (self.site,
+        #                             self.api_prefix))
         if username:
             self.login(username, password)
         elif not self.load_session(try_last=True):
@@ -215,11 +263,12 @@ class ECMService(shellish.Eventer, syndicate.Service):
         if not self.load_session(username):
             self.set_auth(username, password)
 
-    def set_auth(self, username, password=None, session_id=None):
+    def set_auth(self, username, password=None, session_id=None,
+                 session_jwt=None):
         if password is not None:
             self.adapter.auth.use_login(username, password)
         elif session_id:
-            self.adapter.auth.use_session(session_id)
+            self.adapter.auth.use_session(session_id, session_jwt)
         else:
             raise TypeError("password or session_id required")
         self.save_last_username(username)
@@ -257,8 +306,10 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def load_session(self, username=None, try_last=False):
         username, session = self.get_session(username, use_last=try_last)
         self.session_id = session['id'] if session else None
+        self.session_jwt = session.get('jwt') if session else None
         if self.session_id:
-            self.set_auth(username, session_id=self.session_id)
+            self.set_auth(username, session_id=self.session_id,
+                          session_jwt=self.session_jwt)
             return True
         else:
             self.username = None
@@ -271,11 +322,17 @@ class ECMService(shellish.Eventer, syndicate.Service):
             session_id = self.adapter.get_cookie('sessionid')
         except KeyError:
             session_id = None
-        if session_id != self.session_id:
+        try:
+            session_jwt = self.adapter.get_cookie('cpAccountsJwt')
+        except KeyError:
+            session_jwt = None
+        if session_id != self.session_id or session_jwt != self.session_jwt:
             self.save_session({
-                "id": session_id
+                "id": session_id,
+                "jwt": session_jwt
             })
             self.session_id = session_id
+            self.session_jwt = session_jwt
 
     def finish_do(self, callid, result_func, *args, reraise=True, **kwargs):
         try:
