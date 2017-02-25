@@ -1,5 +1,5 @@
 syndicate>=2.1.2
-shellish>=4.1
+shellish>=4.2
 humanize
 cellulario>=2
 python_dateutil
