@@ -1,7 +1,12 @@
 # Change Log
 
-
 ## [Unreleased] - unreleased
+
+
+## [9] - 2017-02-25
+### Added
+- Beta support for SSO login
+
 
 ## [8.1] - 2017-02-23
 ### Fixed
@@ -131,7 +136,9 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v8...HEAD
+[unreleased]: https://github.com/mayfield/ecmcli/compare/v9...HEAD
+[9]: https://github.com/mayfield/ecmcli/compare/v8.1...v9
+[8.1]: https://github.com/mayfield/ecmcli/compare/v8...v8.1
 [8]: https://github.com/mayfield/ecmcli/compare/v7.1...v8
 [7.1]: https://github.com/mayfield/ecmcli/compare/v7...v7.1
 [7]: https://github.com/mayfield/ecmcli/compare/v6...v7
