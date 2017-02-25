@@ -117,6 +117,7 @@ class Printer(object):
         with self.make_table(headers=[x[1] for x in fields],
                              accessors=[x[0]for x in fields]) as t:
             t.print(map(self.bundle_router, routers))
+            t.print_footer('Total Routers: %d' % len(routers))
 
     def colorize_conn_state(self, state):
         colormap = {
