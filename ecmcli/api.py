@@ -11,6 +11,7 @@ import fnmatch
 import html
 import html.parser
 import itertools
+import logging
 import os
 import re
 import requests
@@ -21,7 +22,11 @@ import syndicate
 import syndicate.client
 import syndicate.data
 import warnings
-from syndicate.adapters.sync import LoginAuth, SyncPager
+from syndicate.adapters.sync import SyncPager
+
+logger = logging.getLogger('ecm.api')
+JWT_COOKIE = 'cpAccountsJwt'
+LEGACY_COOKIE = 'sessionid'
 
 
 class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
@@ -55,32 +60,28 @@ class TOSRequired(AuthFailure):
     pass
 
 
-class ECMLogin(LoginAuth):
+class ECMLogin(object):
 
-    def __init__(self, *args, **kwargs):
-        self.initial_session_id = None
-        self.session_mode = None
-        super().__init__(*args, **kwargs)
+    sso_url = 'https://accounts.cradlepointecm.com/login'
+    primer_url = 'https://cradlepointecm.com/api/v1/products/?limit=1'
+    legacy_url = 'https://cradlepointecm.com/api/v1/login/'
 
-    def use_login(self, username, password):
-        self.login = None
+    def __init__(self, api):
+        self._site = api.site
+        self._session = api.adapter.session
+        self._login_attempted = None
+        self.sso = None
+
+    def set_creds(self, username, password):
         self.session_mode = False
-        self.initial_session_id = None
-        self.req_kwargs = dict(data=self.serializer({
-            "username": username,
-            "password": password
-        }))
+        self._login_attempted = False
+        self._username = username
+        self._password = password
 
-    def use_session(self, id, jwt):
+    def set_session(self, id, jwt):
         self.session_mode = True
         self.initial_session_id = id
         self.initial_session_jwt = jwt
-
-    def check_login_response(self):
-        super().check_login_response()
-        resp = self.login.json()['data']
-        if resp.get('success') is False:
-            raise Unauthorized(resp['error_code'])
 
     def reset(self, request):
         try:
@@ -90,59 +91,47 @@ class ECMLogin(LoginAuth):
 
     def __call__(self, request):
         if self.session_mode:
-            if self.initial_session_id:
+            if self.initial_session_jwt:
                 self.reset(request)
-                request.prepare_cookies({
-                    "sessionid": self.initial_session_id,
-                    "cpAccountsJwt": self.initial_session_jwt
+                logger.info("Attempting to use saved session for login...")
+                self._session.cookies.update({
+                    JWT_COOKIE: self.initial_session_jwt,
+                    LEGACY_COOKIE: self.initial_session_id
                 })
-                self.initial_session_id = None
                 self.initial_session_jwt = None
-        elif self.login is None:
-            self.reset(request)
-            return super().__call__(request)
-        return request
-
-
-class ECMSSOLogin(ECMLogin):
-
-    sso_url = 'https://accounts.cradlepointecm.com/login'
-
-    def __init__(self, site=None):
-        self._site = site
-        super().__init__(None)
-
-    def use_login(self, username, password):
-        self._username = username
-        self._password = password
-        super().use_login(username, password)
-
-    def check_login_response(self):
-        LoginAuth.check_login_response(self)
-
-    def __call__(self, request):
-        if self.session_mode:
-            if self.initial_session_id:
+                self.initial_session_id = None
+                logger.info("Loaded Session for SSO")
+                self.sso = True
+            elif self.initial_session_id:
                 self.reset(request)
-                request.prepare_cookies({
-                    "sessionid": self.initial_session_id,
-                    "cpAccountsJwt": self.initial_session_jwt
-                })
+                self._session.cookies[LEGACY_COOKIE] = self.initial_session_id
                 self.initial_session_id = None
-                self.initial_session_jwt = None
-        elif self.login is None:
+                logger.info("Loaded Session for Legacy Auth")
+                self.sso = False
+        elif not self._login_attempted:
+            self._login_attempted = True
             self.reset(request)
-            rs = requests.Session()
-            rs.post(self.sso_url, data={
+            logger.info("Attempting to login with credentials...")
+            creds = {
                 "username": self._username,
                 "password": self._password,
-            }, allow_redirects=False)
-            self.login = rs.get('%s/api/v1/products?limit=1' % self._site)
-            self.check_login_response()
-            request.prepare_cookies({
-                "cpAccountsJwt": rs.cookies['cpAccountsJwt'],
-                "sessionid": self.login.cookies['sessionid']
-            })
+            }
+            resp = requests.post(self.sso_url, data=creds,
+                                 allow_redirects=False)
+            if JWT_COOKIE in resp.cookies:
+                logger.info("SSO Login Success")
+                self._session.cookies[JWT_COOKIE] = resp.cookies[JWT_COOKIE]
+                logger.debug("Priming session...")
+                self._session.get(self.primer_url)
+                self.sso = True
+            else:
+                logger.info("SSO auth failed, trying legacy auth")
+                resp = requests.post(self.legacy_url, json=creds)
+                if resp.status_code not in (200, 201):
+                    raise Unauthorized('Invalid Login')
+                self._session.cookies[LEGACY_COOKIE] = resp.cookies[LEGACY_COOKIE]
+                self.sso = False
+        request.prepare_cookies(self._session.cookies)
         return request
 
 
@@ -210,6 +199,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
             self.adapter.session.mount('http://', a)
         self.username = None
         self.session_id = None
+        self.session_jwt = None
         self.add_events([
             'start_request',
             'finish_request',
@@ -220,14 +210,15 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def clone(self, **varations):
         """ Produce a cloned instance of ourselves, including state. """
         clone = type(self)(**varations)
-        copy = ('parent_account', 'session_id', 'username', 'ident', 'uri',
-                '_events', 'call_count')
+        copy = ('parent_account', 'session_id', 'session_jwt', 'username',
+                'ident', 'uri', '_events', 'call_count')
         for x in copy:
             value = getattr(self, x)
             if hasattr(value, 'copy'):  # containers
                 value = value.copy()
             setattr(clone, x, value)
-        clone.adapter.set_cookie('sessionid', clone.session_id)
+        clone.adapter.set_cookie(LEGACY_COOKIE, clone.session_id)
+        clone.adapter.set_cookie(JWT_COOKIE, clone.session_jwt)
         return clone
 
     @property
@@ -245,9 +236,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
             self.site = site
         self.parent_account = None
         self.uri = self.site
-        self.adapter.auth = ECMSSOLogin(site=self.site)
-        #self.adapter.auth = ECMLogin(url='%s%s/login/' % (self.site,
-        #                             self.api_prefix))
+        self.adapter.auth = ECMLogin(self)
         if username:
             self.login(username, password)
         elif not self.load_session(try_last=True):
@@ -255,7 +244,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
 
     def reset_auth(self):
         self.fire_event('reset_auth')
-        self.adapter.set_cookie('sessionid', None)
+        self.adapter.set_cookie(LEGACY_COOKIE, None)
+        self.adapter.set_cookie(JWT_COOKIE, None)
         self.save_session(None)
         self.ident = None
 
@@ -266,14 +256,16 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def set_auth(self, username, password=None, session_id=None,
                  session_jwt=None):
         if password is not None:
-            self.adapter.auth.use_login(username, password)
+            self.adapter.auth.set_creds(username, password)
         elif session_id:
-            self.adapter.auth.use_session(session_id, session_jwt)
+            self.adapter.auth.set_session(session_id, session_jwt)
         else:
             raise TypeError("password or session_id required")
         self.save_last_username(username)
         self.username = username
         self.ident = self.get('login')
+        if self.adapter.auth.sso:
+            self.ident['user']['username'] = self.ident['user']['email']
 
     def get_session(self, username=None, use_last=False):
         if use_last:
@@ -319,14 +311,15 @@ class ECMService(shellish.Eventer, syndicate.Service):
         """ ECM sometimes updates the session token. We make sure we are in
         sync. """
         try:
-            session_id = self.adapter.get_cookie('sessionid')
+            session_id = self.adapter.get_cookie(LEGACY_COOKIE)
         except KeyError:
             session_id = None
         try:
-            session_jwt = self.adapter.get_cookie('cpAccountsJwt')
+            session_jwt = self.adapter.get_cookie(JWT_COOKIE)
         except KeyError:
             session_jwt = None
         if session_id != self.session_id or session_jwt != self.session_jwt:
+            logger.info("Saving Session: %s %s" % (session_id, session_jwt))
             self.save_session({
                 "id": session_id,
                 "jwt": session_jwt

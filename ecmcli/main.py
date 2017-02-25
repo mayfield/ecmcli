@@ -3,8 +3,10 @@ Bootstrap the shell and commands and then run either one.
 """
 
 import importlib
+import logging
 import pkg_resources
 import shellish
+import shellish.logging
 import sys
 from . import api
 from .commands import base, shtools
@@ -38,7 +40,7 @@ command_modules = [
 class ECMSession(shellish.Session):
 
     command_error_verbosity = 'pretty'
-    default_prompt_format = r': \033[7m{user}\033[0m@{site} ;\n:;'
+    default_prompt_format = r': \033[7m{user}\033[0m / ECM ;\n:;'
     intro = '\n'.join([
         'Welcome to the ECM shell.',
         'Type "help" or "?" to list commands and "exit" to quit.'
@@ -51,7 +53,7 @@ class ECMSession(shellish.Session):
     def prompt_info(self):
         info = super().prompt_info()
         ident = self.root_command.api.ident
-        username = ident['user']['username'] if ident else '<not_logged_in>'
+        username = ident['user']['username'] if ident else '*LOGGED_OUT*'
         info.update({
             "user": username,
             "site": self.root_command.api.site.split('//', 1)[1]
@@ -89,6 +91,7 @@ class ECMRoot(base.ECMCommand):
         self.add_argument('--api-site',
                           help='E.g. https://cradlepointecm.com')
         self.add_argument('--debug', action='store_true')
+        self.add_argument('--trace', action='store_true')
         self.add_argument('--no-pager', action='store_true')
         self.add_argument('--version', action='version',
                           version=distro.version)
@@ -127,8 +130,13 @@ def _main():
     args = root.parse_args()
     if args.no_pager:
         root.session.allow_pager = False
-    if args.debug:
+    if args.trace:
         root['trace']['enable'](argv='')
+    if args.debug:
+        if args.debug:
+            logger = logging.getLogger()
+            logger.setLevel('DEBUG')
+            logger.addHandler(shellish.logging.VTMLHandler())
     try:
         root.api.connect(args.api_site, username=args.api_username,
                          password=args.api_password)
