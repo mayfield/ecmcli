@@ -40,7 +40,7 @@ command_modules = [
 class ECMSession(shellish.Session):
 
     command_error_verbosity = 'pretty'
-    default_prompt_format = r': \033[7m{user}\033[0m / ECM ;\n:;'
+    default_prompt_format = r': \033[7m{user}\033[0m / ECM ;'
     intro = '\n'.join([
         'Welcome to the ECM shell.',
         'Type "help" or "?" to list commands and "exit" to quit.'
