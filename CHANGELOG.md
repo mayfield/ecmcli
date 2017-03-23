@@ -1,6 +1,8 @@
 # Change Log
 
 ## [Unreleased] - unreleased
+### Fixed
+- Fix `remote` and `logs -f` regression from SSO support.
 
 
 ## [9.1] - 2017-02-25

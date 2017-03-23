@@ -217,8 +217,10 @@ class ECMService(shellish.Eventer, syndicate.Service):
             if hasattr(value, 'copy'):  # containers
                 value = value.copy()
             setattr(clone, x, value)
-        clone.adapter.set_cookie(LEGACY_COOKIE, clone.session_id)
-        clone.adapter.set_cookie(JWT_COOKIE, clone.session_jwt)
+        if clone.session_jwt is not None:
+            clone.adapter.set_cookie(JWT_COOKIE, clone.session_jwt)
+        else:
+            clone.adapter.set_cookie(LEGACY_COOKIE, clone.session_id)
         return clone
 
     @property
