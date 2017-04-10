@@ -1,8 +1,12 @@
 # Change Log
 
 ## [Unreleased] - unreleased
+
+
+## [9.2] - 2017-04-10
 ### Fixed
 - Fix `remote` and `logs -f` regression from SSO support.
+- Avoid use of aiohttp 2 until we support it.
 
 
 ## [9.1] - 2017-02-25
@@ -147,7 +151,8 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v9.1...HEAD
+[unreleased]: https://github.com/mayfield/ecmcli/compare/v9.2...HEAD
+[9.2]: https://github.com/mayfield/ecmcli/compare/v9.1...v9.2
 [9.1]: https://github.com/mayfield/ecmcli/compare/v9...v9.1
 [9]: https://github.com/mayfield/ecmcli/compare/v8.1...v9
 [8.1]: https://github.com/mayfield/ecmcli/compare/v8...v8.1
