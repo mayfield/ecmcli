@@ -1,4 +1,5 @@
 syndicate>=2.1.2
+aiohttp>=1.3,<2
 shellish>=4.3
 humanize
 cellulario>=2

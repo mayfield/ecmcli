@@ -97,6 +97,7 @@ class ECMRoot(base.ECMCommand):
                           version=distro.version)
         self.add_subcommand(contrib.Commands)
         self.add_subcommand(contrib.SystemCompletion)
+        self.add_subcommand(contrib.Help)
 
     def prerun(self, args):
         """ Add the interactive commands just before it goes to the prompt so
@@ -104,7 +105,6 @@ class ECMRoot(base.ECMCommand):
         for x in shtools.command_classes:
             self.add_subcommand(x)
         self.add_subcommand(contrib.Exit)
-        self.add_subcommand(contrib.Help)
         self.add_subcommand(contrib.INI)
         self.add_subcommand(contrib.Reset)
         self.add_subcommand(contrib.Pager)
