@@ -145,7 +145,6 @@ class ECMCommand(shellish.Command):
         """ Return a Searcher instance for doing API based lookups.  This
         is primarily designed to meet needs of argparse arguments and tab
         completion. """
-
         field_completers = {}
         fields = {}
         for x in field_desc:

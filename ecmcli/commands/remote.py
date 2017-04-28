@@ -69,7 +69,11 @@ class DeviceSelectorsMixin(object):
             if hit:
                 rids.append(hit['id'])
         if args.get('search'):
-            rids.extend(x['id'] for x in self.search_lookup(args['search']))
+            sids = self.search_lookup(args['search'])
+            if not sids:
+                rids.append('-1')  # Ensure no match is possible softly.
+            else:
+                rids.extend(x['id'] for x in sids)
         if rids:
             filters['id__in'] = ','.join(rids)
         if args.get('disjunction'):
