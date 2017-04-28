@@ -232,7 +232,7 @@ class DeployRemove(CommonMixin, base.ECMCommand):
     def run(self, args):
         if args.deploy_id:
             if not args.force:
-                self.confirm("Delete %s?" % args.deploy_id)
+                self.confirm("Remove %s?" % args.deploy_id)
             self.api.delete(deploy_res, args.deploy_id)
         else:
             app = self.get_app(args.app_ident)
@@ -246,7 +246,8 @@ class DeployRemove(CommonMixin, base.ECMCommand):
             if not deploys:
                 raise SystemExit("No deploys to remove")
             if not args.force:
-                self.confirm("Delete %s?" % ', '.join(x['id'] for x in deploys))
+                self.confirm("Remove %s?" % ', '.join(x['id']
+                             for x in deploys))
             for x in deploys:
                 self.api.delete(deploy_res, x['id'])
 

@@ -1,6 +1,7 @@
 import unittest.mock
 from ecmcli.commands import routers
 
+
 class ArgSanity(unittest.TestCase):
 
     def setUp(self):

@@ -6,7 +6,6 @@ import collections
 import csv
 import datetime
 import itertools
-import json
 import shellish
 import syndicate.data
 import time
@@ -158,7 +157,7 @@ class Get(DeviceSelectorsMixin, base.ECMCommand):
         filters = self.gen_selection_filters(args)
         outformat = args.output
         fallback_format = self.tree_format if not args.repeat else \
-                          self.table_format
+            self.table_format
         with args.output_file as f:
             if not outformat and hasattr(f.name, 'rsplit'):
                 outformat = f.name.rsplit('.', 1)[-1]
@@ -325,16 +324,7 @@ class Set(DeviceSelectorsMixin, base.ECMCommand):
                           "done and the potential peril if executed.")
 
     def run(self, args):
-        try:
-            value = json.loads(value)
-        except ValueError as e:
-            raise SystemExit('Invalid JSON Value: %s' % e)
-        for x in routers:
-            ok = self.api.remote('config', key.replace('.', '/'),
-                                 value, id=x['id'])[0]
-            status = 'okay' if ok['success'] else \
-                     '%s %s' % (ok['exception'], ok.get('message', ''))
-            print('%s:' % x['name'], status)
+        raise NotImplementedError()
 
 
 class Diff(base.ECMCommand):
@@ -393,7 +383,6 @@ class Remote(base.ECMCommand):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_subcommand(Get, default=True)
-        self.add_subcommand(Set)
         self.add_subcommand(Diff)
 
 command_classes = [Remote]

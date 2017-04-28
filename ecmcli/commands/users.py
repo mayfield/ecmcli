@@ -31,10 +31,9 @@ class Common(object):
     def bundle_user(self, user):
         account = user['profile']['account']
         user['name'] = '%(first_name)s %(last_name)s' % user
-        user['roles'] = ', '.join(x['role']['name']
-                                  for x in user['authorizations']
-                                  if not isinstance(x, str) and
-                                     x['role']['id'] != '4')
+        roles = (x['role']['name'] for x in user['authorizations']
+                 if not isinstance(x, str) and x['role']['id'] != '4')
+        user['roles'] = ', '.join(roles)
         if isinstance(account, str):
             user['account_desc'] = '(%s)' % account.split('/')[-2]
         else:
@@ -61,7 +60,7 @@ class Printer(object):
     def prerun(self, args):
         self.verbose = args.verbose
         self.printer = self.verbose_printer if self.verbose else \
-                       self.terse_printer
+            self.terse_printer
         super().prerun(args)
 
     def verbose_printer(self, users):
@@ -199,8 +198,8 @@ class Edit(Common, base.ECMCommand):
                          {"session_length": args.session_length})
 
 
-class Delete(Common, base.ECMCommand):
-    """ Delete a user. """
+class Remove(Common, base.ECMCommand):
+    """ Remove a user. """
 
     name = 'rm'
     use_pager = False
@@ -213,7 +212,7 @@ class Delete(Common, base.ECMCommand):
     def run(self, args):
         for user in self.get_users(args.usernames):
             if not args.force and \
-               not self.confirm('Delete user: %s' % user['username'],
+               not self.confirm('Remove user: %s' % user['username'],
                                 exit=False):
                 continue
             self.api.delete('users', user['id'])
@@ -285,7 +284,7 @@ class Users(base.ECMCommand):
         super().__init__(*args, **kwargs)
         self.add_subcommand(List, default=True)
         self.add_subcommand(Create)
-        self.add_subcommand(Delete)
+        self.add_subcommand(Remove)
         self.add_subcommand(Edit)
         self.add_subcommand(Move)
         self.add_subcommand(Passwd)

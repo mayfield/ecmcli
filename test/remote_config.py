@@ -7,7 +7,7 @@ from ecmcli.commands import base, remote
 class ConfigData(unittest.TestCase):
 
     def test_todict_noconv(self):
-        for x in ({}, 0, None, 1, "", True, False, 0.0, -1, -1.1, 1.1, {1:1}):
+        for x in ({}, 0, None, 1, "", True, False, 0.0, -1, -1.1, 1.1, {1: 1}):
             self.assertEqual(base.todict(x), copy.deepcopy(x))
 
     def test_todict_nesting(self):
@@ -31,17 +31,17 @@ class ConfigData(unittest.TestCase):
 
     def test_todict_multi_dim_list(self):
         case = [["aaa", "bbb"]]
-        result = {0:{0: 'aaa', 1: 'bbb'}}
+        result = {0: {0: 'aaa', 1: 'bbb'}}
         self.assertEqual(base.todict(case), result)
         case = [["aaa", "bbb"], 1]
-        result = {0:{0: 'aaa', 1: 'bbb'}, 1:1}
+        result = {0: {0: 'aaa', 1: 'bbb'}, 1: 1}
         self.assertEqual(base.todict(case), result)
         case = [["aaa", "bbb"], []]
-        result = {0:{0: 'aaa', 1: 'bbb'}, 1:{}}
+        result = {0: {0: 'aaa', 1: 'bbb'}, 1: {}}
         self.assertEqual(base.todict(case), result)
         case = [[['a']]]
-        result = {0:{0:{0:'a'}}}
+        result = {0: {0: {0: 'a'}}}
         self.assertEqual(base.todict(case), result)
         case = [[[]]]
-        result = {0:{0:{}}}
+        result = {0: {0: {}}}
         self.assertEqual(base.todict(case), result)

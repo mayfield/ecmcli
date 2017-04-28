@@ -29,7 +29,7 @@ setup(
     packages=find_packages(),
     test_suite='test',
     install_requires=requirements,
-    entry_points = {
+    entry_points={
         'console_scripts': ['ecm=ecmcli.main:main'],
     },
     include_package_data=True,

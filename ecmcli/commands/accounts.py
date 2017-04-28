@@ -167,8 +167,8 @@ class Create(base.ECMCommand):
         self.api.post('accounts', new_account)
 
 
-class Delete(base.ECMCommand):
-    """ Delete an account """
+class Remove(base.ECMCommand):
+    """ Remove an account """
 
     name = 'rm'
     use_pager = False
@@ -178,7 +178,7 @@ class Delete(base.ECMCommand):
         self.add_argument('-f', '--force', action='store_true',
                           help='Do not prompt for confirmation')
         self.add_argument('-r', '--recursive', action='store_true',
-                          help='Delete all subordinate resources too.')
+                          help='Remove all subordinate resources too.')
 
     def run(self, args):
         for x in args.idents:
@@ -192,11 +192,12 @@ class Delete(base.ECMCommand):
                     r = resources
                     self.confirm('Confirm removal of "%s" along with %d '
                                  'subaccounts, %d groups, %d routers and %d '
-                                 'users' % (account['name'],
-                                 len(r['subaccounts']), len(r['groups']),
-                                 len(r['routers']), len(r['users'])))
+                                 'users' %
+                                 (account['name'], len(r['subaccounts']),
+                                  len(r['groups']), len(r['routers']),
+                                  len(r['users'])))
                 else:
-                    self.confirm('Confirm account delete: %s (%s)' % (
+                    self.confirm('Confirm account removal: %s (%s)' % (
                                  account['name'], account['id']))
             if resources:
                 for res in ('users', 'routers', 'groups', 'subaccounts'):
@@ -281,7 +282,7 @@ class Accounts(base.ECMCommand):
         self.add_subcommand(List, default=True)
         self.add_subcommand(Tree)
         self.add_subcommand(Create)
-        self.add_subcommand(Delete)
+        self.add_subcommand(Remove)
         self.add_subcommand(Move)
         self.add_subcommand(Rename)
         self.add_subcommand(Search)

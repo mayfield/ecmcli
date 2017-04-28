@@ -2,7 +2,6 @@
 Monitor live network flow of one or more devices.
 """
 
-import asyncio
 import collections
 from . import base
 

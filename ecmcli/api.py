@@ -129,7 +129,8 @@ class ECMLogin(object):
                 resp = requests.post(self.legacy_url, json=creds)
                 if resp.status_code not in (200, 201):
                     raise Unauthorized('Invalid Login')
-                self._session.cookies[LEGACY_COOKIE] = resp.cookies[LEGACY_COOKIE]
+                self._session.cookies[LEGACY_COOKIE] = \
+                    resp.cookies[LEGACY_COOKIE]
                 self.sso = False
         request.prepare_cookies(self._session.cookies)
         return request
@@ -181,7 +182,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
         'set': r'\{.*\}'
     }
     re_glob_matches = re.compile('|'.join('(?P<%s>%s)' % x
-                              for x in globs.items()))
+                                 for x in globs.items()))
     re_glob_sep = re.compile('(%s)' % '|'.join(globs.values()))
     default_remote_concurrency = 20
     # Resources that don't page correctly.
@@ -440,11 +441,11 @@ class ECMService(shellish.Eventer, syndicate.Service):
         given to a filter arg it is converted to the appropriate disjunction
         filters.  That is, if you ask for field=['foo*', 'bar*'] it will return
         entries that start with `foo` OR `bar`.  The normal behavior would
-        produce a paradoxical query staying it had to start with both. """
+        produce a paradoxical query saying it had to start with both. """
         exclude = {"expand", "limit", "timeout", "_or", "page_size", "urn",
                    "data", "callback"}
         iterable = lambda x: isinstance(x, collections.abc.Iterable) and \
-                             not isinstance(x, str)
+            not isinstance(x, str)
         glob_tests = []
         glob_filters = collections.defaultdict(list)
         for fkey, fval in list(kwargs.items()):
@@ -594,7 +595,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def get_pager(self, *path, **kwargs):
         resource = path[0].split('/', 1)[0] if path else None
         if resource in self.aberrant_pager_resources:
-            assert not self.async, 'Only sync mode supported for: %s' % resource
+            assert not self.async, 'Only sync mode supported for: %s' % \
+                resource
             page_arg = kwargs.pop('page_size', None)
             limit_arg = kwargs.pop('limit', None)
             kwargs['limit'] = page_arg or limit_arg or self.default_page_size

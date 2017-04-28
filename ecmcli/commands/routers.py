@@ -82,8 +82,8 @@ class Printer(object):
             loc = x.get('last_known_location')
             x['location_info'] = location_url % loc if loc else ''
             ents = x['featurebindings']
-            acc = lambda x: x['settings']['entitlement']['sf_entitlements'] \
-                             [0]['name']
+            acc = lambda x: x['settings']['entitlement']['sf_entitlements'][
+                0]['name']
             x['entitlements'] = ', '.join(map(acc, ents)) if ents else ''
             x['dashboard_url'] = 'https://cradlepointecm.com/ecm.html' \
                                  '#devices/dashboard?id=%s' % x['id']

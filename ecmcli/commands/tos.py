@@ -21,7 +21,7 @@ class Review(base.ECMCommand):
         width = shutil.get_terminal_size()[0]
         data = str(shellish.htmlrender(tos['message'])).splitlines()
         for section in data:
-            lines = textwrap.wrap(section, width-4)
+            lines = textwrap.wrap(section, width - 4)
             if not lines:
                 print()
             for x in lines:
@@ -68,10 +68,10 @@ class Accept(Review):
         print()
         if self.accept:
             shellish.vtmlprint('I, %s %s (%s), do hereby accept the ECM '
-                               'terms of service: <u><b>   X   </b></u>' % (
-                               self.api.ident['user']['first_name'],
-                               self.api.ident['user']['last_name'],
-                               self.api.ident['user']['username']))
+                               'terms of service: <u><b>   X   </b></u>' %
+                               (self.api.ident['user']['first_name'],
+                                self.api.ident['user']['last_name'],
+                                self.api.ident['user']['username']))
         else:
             accept = input('Type "accept" to comply with the TOS: ')
             if accept != 'accept':

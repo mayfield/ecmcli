@@ -343,8 +343,8 @@ class ConfigSet(base.ECMCommand):
             for x in new_add_keys & old_add_keys:
                 if old_adds[x] != new_adds[x]:
                     shellish.vtmlprint('<yellow>Changing:</yellow> %s (%s'
-                                       '<b> -> </b>%s)' % (x, old_adds[x],
-                                       new_adds[x]))
+                                       '<b> -> </b>%s)' %
+                                       (x, old_adds[x], new_adds[x]))
             old_removes = set(map(tuple, cur_patch[1]))
             new_removes = set(map(tuple, patch[1]))
             for x in old_removes - new_removes:

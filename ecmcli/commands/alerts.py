@@ -40,7 +40,8 @@ class List(base.ECMCommand):
         fields = collections.OrderedDict((
             ('Type', 'type'),
             ('Info', 'friendly_info'),
-            ('Time', lambda x: ui.formatdatetime(ui.localize_dt(x['detected_at'])))
+            ('Time', lambda x: ui.formatdatetime(ui.localize_dt(
+                x['detected_at'])))
         ))
         with self.make_table(headers=fields.keys(),
                              accessors=fields.values()) as t:
@@ -59,7 +60,8 @@ class Summary(base.ECMCommand):
 
     def run(self, args):
         by_type = collections.OrderedDict()
-        alerts = self.api.get_pager('router_alerts', order_by='-created_at_timeuuid')
+        alerts = self.api.get_pager('router_alerts',
+                                    order_by='-created_at_timeuuid')
         if sys.stdout.isatty():
             msg = 'Collecting alerts: '
             alerts = shellish.progressbar(alerts, prefix=msg, clear=True)
@@ -91,7 +93,8 @@ class Webhook(base.ECMCommand):
 
     def run(self, args):
         by_type = collections.OrderedDict()
-        alerts = self.api.get_pager('router_alerts', order_by='-created_at_timeuuid')
+        alerts = self.api.get_pager('router_alerts',
+                                    order_by='-created_at_timeuuid')
         if sys.stdout.isatty():
             msg = 'Collecting alerts: '
             alerts = shellish.progressbar(alerts, prefix=msg, clear=True)
