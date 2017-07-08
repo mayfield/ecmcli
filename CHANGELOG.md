@@ -1,6 +1,8 @@
 # Change Log
 
 ## [Unreleased] - unreleased
+### Fixed
+- KeyError with SSO failed login attempt.
 
 
 ## [9.2] - 2017-04-10
