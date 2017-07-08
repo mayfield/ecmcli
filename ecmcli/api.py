@@ -129,8 +129,9 @@ class ECMLogin(object):
                 resp = requests.post(self.legacy_url, json=creds)
                 if resp.status_code not in (200, 201):
                     raise Unauthorized('Invalid Login')
-                self._session.cookies[LEGACY_COOKIE] = \
-                    resp.cookies[LEGACY_COOKIE]
+                if LEGACY_COOKIE in resp.cookies:
+                    self._session.cookies[LEGACY_COOKIE] = \
+                        resp.cookies[LEGACY_COOKIE]
                 self.sso = False
         request.prepare_cookies(self._session.cookies)
         return request
