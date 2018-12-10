@@ -24,7 +24,10 @@ class Shell(base.ECMCommand):
     # have been detected.
     key_idle_timeout = 0.150
     raw_in = sys.stdin.buffer.raw
-    raw_out = sys.stdout.buffer.raw
+    try:
+        raw_out = sys.stdout.buffer.raw
+    except AttributeError:
+        raw_out = None
 
     def setup_args(self, parser):
         self.add_router_argument()
@@ -32,6 +35,9 @@ class Shell(base.ECMCommand):
                           help='Start a new session')
 
     def run(self, args):
+        if not self.raw_out:
+            print("No raw stdout device available")
+            return
         router = self.api.get_by_id_or_name('routers', args.ident)
         print("Connecting to: %s (%s)" % (router['name'], router['id']))
         print("Type ~~ rapidly to close session")
