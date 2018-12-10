@@ -78,10 +78,10 @@ class ECMLogin(object):
         self._username = username
         self._password = password
 
-    def set_session(self, id, jwt):
+    def set_session(self, legacy_id, jwt):
         self.session_mode = True
-        self.initial_session_id = id
-        self.initial_session_jwt = jwt
+        self.initial_legacy_id = legacy_id
+        self.initial_jwt = jwt
 
     def reset(self, request):
         try:
@@ -91,21 +91,21 @@ class ECMLogin(object):
 
     def __call__(self, request):
         if self.session_mode:
-            if self.initial_session_jwt:
+            if self.initial_jwt:
                 self.reset(request)
                 logger.info("Attempting to use saved session for login...")
                 self._session.cookies.update({
-                    JWT_COOKIE: self.initial_session_jwt,
-                    LEGACY_COOKIE: self.initial_session_id
+                    JWT_COOKIE: self.initial_jwt,
+                    LEGACY_COOKIE: self.initial_legacy_id
                 })
-                self.initial_session_jwt = None
-                self.initial_session_id = None
+                self.initial_jwt = None
+                self.initial_legacy_id = None
                 logger.info("Loaded Session for SSO")
                 self.sso = True
-            elif self.initial_session_id:
+            elif self.initial_legacy_id:
                 self.reset(request)
-                self._session.cookies[LEGACY_COOKIE] = self.initial_session_id
-                self.initial_session_id = None
+                self._session.cookies[LEGACY_COOKIE] = self.initial_legacy_id
+                self.initial_legacy_id = None
                 logger.info("Loaded Session for Legacy Auth")
                 self.sso = False
         elif not self._login_attempted:
@@ -200,8 +200,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
             self.adapter.session.mount('https://', a)
             self.adapter.session.mount('http://', a)
         self.username = None
-        self.session_id = None
-        self.session_jwt = None
+        self.legacy_id = None
+        self.jwt = None
         self.add_events([
             'start_request',
             'finish_request',
@@ -212,17 +212,17 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def clone(self, **varations):
         """ Produce a cloned instance of ourselves, including state. """
         clone = type(self)(**varations)
-        copy = ('parent_account', 'session_id', 'session_jwt', 'username',
+        copy = ('parent_account', 'legacy_id', 'jwt', 'username',
                 'ident', 'uri', '_events', 'call_count')
         for x in copy:
             value = getattr(self, x)
             if hasattr(value, 'copy'):  # containers
                 value = value.copy()
             setattr(clone, x, value)
-        if clone.session_jwt is not None:
-            clone.adapter.set_cookie(JWT_COOKIE, clone.session_jwt)
+        if clone.jwt is not None:
+            clone.adapter.set_cookie(JWT_COOKIE, clone.jwt)
         else:
-            clone.adapter.set_cookie(LEGACY_COOKIE, clone.session_id)
+            clone.adapter.set_cookie(LEGACY_COOKIE, clone.legacy_id)
         return clone
 
     @property
@@ -257,14 +257,13 @@ class ECMService(shellish.Eventer, syndicate.Service):
         if not self.load_session(username):
             self.set_auth(username, password)
 
-    def set_auth(self, username, password=None, session_id=None,
-                 session_jwt=None):
+    def set_auth(self, username, password=None, legacy_id=None, jwt=None):
         if password is not None:
             self.adapter.auth.set_creds(username, password)
-        elif session_id:
-            self.adapter.auth.set_session(session_id, session_jwt)
+        elif legacy_id or jwt:
+            self.adapter.auth.set_session(legacy_id, jwt)
         else:
-            raise TypeError("password or session_id required")
+            raise TypeError("password or legacy_id required")
         self.save_last_username(username)
         self.username = username
         self.ident = self.get('login')
@@ -301,11 +300,10 @@ class ECMService(shellish.Eventer, syndicate.Service):
 
     def load_session(self, username=None, try_last=False):
         username, session = self.get_session(username, use_last=try_last)
-        self.session_id = session['id'] if session else None
-        self.session_jwt = session.get('jwt') if session else None
-        if self.session_id:
-            self.set_auth(username, session_id=self.session_id,
-                          session_jwt=self.session_jwt)
+        self.legacy_id = session.get('id') if session else None
+        self.jwt = session.get('jwt') if session else None
+        if self.legacy_id or self.jwt:
+            self.set_auth(username, legacy_id=self.legacy_id, jwt=self.jwt)
             return True
         else:
             self.username = None
@@ -315,21 +313,21 @@ class ECMService(shellish.Eventer, syndicate.Service):
         """ ECM sometimes updates the session token. We make sure we are in
         sync. """
         try:
-            session_id = self.adapter.get_cookie(LEGACY_COOKIE)
+            legacy_id = self.adapter.get_cookie(LEGACY_COOKIE)
         except KeyError:
-            session_id = None
+            legacy_id = self.legacy_id
         try:
-            session_jwt = self.adapter.get_cookie(JWT_COOKIE)
+            jwt = self.adapter.get_cookie(JWT_COOKIE)
         except KeyError:
-            session_jwt = None
-        if session_id != self.session_id or session_jwt != self.session_jwt:
-            logger.info("Saving Session: %s %s" % (session_id, session_jwt))
+            jwt = self.jwt
+        if legacy_id != self.legacy_id or jwt != self.jwt:
+            logger.info("Updating Session: ID:%s JWT:%s" % (legacy_id, jwt))
             self.save_session({
-                "id": session_id,
-                "jwt": session_jwt
+                "id": legacy_id,
+                "jwt": jwt
             })
-            self.session_id = session_id
-            self.session_jwt = session_jwt
+            self.legacy_id = legacy_id
+            self.jwt = jwt
 
     def finish_do(self, callid, result_func, *args, reraise=True, **kwargs):
         try:
