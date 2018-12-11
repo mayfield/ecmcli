@@ -42,7 +42,7 @@ class Shell(base.ECMCommand):
         print("Connecting to: %s (%s)" % (router['name'], router['id']))
         print("Type ~~ rapidly to close session")
         sessionid = int(time.time() * 10000) if args.new else \
-            self.api.session_id
+            self.api.legacy_id
         with self.setup_tty():
             self.rsh(router, sessionid)
 
