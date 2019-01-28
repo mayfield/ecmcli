@@ -1,8 +1,11 @@
 # Change Log
 
-## [Unreleased] - unreleased
+
+## [9.4] - 2018-01-28
 ### Fixed
 - KeyError with SSO failed login attempt.
+- Python 3.7 support
+- Logs command handling of "WARN" and "WARNING" level.
 
 
 ## [9.2] - 2017-04-10
@@ -153,7 +156,7 @@
 - First alpha release
 
 
-[unreleased]: https://github.com/mayfield/ecmcli/compare/v9.2...HEAD
+[9.4]: https://github.com/mayfield/ecmcli/compare/v9.2...v9.4
 [9.2]: https://github.com/mayfield/ecmcli/compare/v9.1...v9.2
 [9.1]: https://github.com/mayfield/ecmcli/compare/v9...v9.1
 [9]: https://github.com/mayfield/ecmcli/compare/v8.1...v9
