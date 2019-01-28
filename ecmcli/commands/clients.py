@@ -123,7 +123,7 @@ class List(base.ECMCommand):
                 self.wifi_bss_acc
             ])
         cell = cellulario.IOCell(coord='pool')
-        async_api = self.api.clone(async=True, loop=cell.loop)
+        async_api = self.api.clone(aio=True, loop=cell.loop)
 
         @cell.tier()
         def get_clients(route):

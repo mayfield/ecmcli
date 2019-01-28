@@ -19,8 +19,8 @@ def long_desc():
 
 setup(
     name='ecmcli',
-    version='9.3',
-    description='Command Line Interface for Cradlepoint ECM',
+    version='9.4',
+    description='Command Line Interface for Cradlepoint ECM (e.g. NCM)',
     author='Justin Mayfield',
     author_email='tooker@gmail.com',
     url='https://github.com/mayfield/ecmcli/',
@@ -30,7 +30,7 @@ setup(
     test_suite='test',
     install_requires=requirements,
     entry_points={
-        'console_scripts': ['ecm=ecmcli.main:main'],
+        'console_scripts': ['ecm=ecmcli.main:main', 'ncm=ecmcli.main:main'],
     },
     include_package_data=True,
     classifiers=[
@@ -42,5 +42,6 @@ setup(
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
     ]
 )

@@ -22,7 +22,7 @@ import syndicate
 import syndicate.client
 import syndicate.data
 import warnings
-from syndicate.adapters.sync import SyncPager
+from syndicate.adapters.requests import RequestsPager
 
 logger = logging.getLogger('ecm.api')
 JWT_COOKIE = 'cpAccountsJwt'
@@ -137,7 +137,7 @@ class ECMLogin(object):
         return request
 
 
-class AberrantPager(SyncPager):
+class AberrantPager(RequestsPager):
     """ The time-series resources in ECM have broken paging.  limit and offset
     mean different things, next is erroneous and total_count is a lie. """
 
@@ -195,7 +195,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def __init__(self, **kwargs):
         super().__init__(uri='nope', urn=self.api_prefix,
                          serializer='htmljson', **kwargs)
-        if not self.async:
+        if not self.aio:
             a = requests.adapters.HTTPAdapter(max_retries=3)
             self.adapter.session.mount('https://', a)
             self.adapter.session.mount('http://', a)
@@ -346,7 +346,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
         """ Wrap some session and error handling around all API actions. """
         callid = next(self.call_count)
         self.fire_event('start_request', callid, args=args, kwargs=kwargs)
-        if self.async:
+        if self.aio:
             on_fin = lambda f: self.finish_do(callid, f.result, reraise=False)
             future = asyncio.ensure_future(self._do(*args, **kwargs))
             future.add_done_callback(on_fin)
@@ -553,7 +553,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
             raise ValueError("Concurrency less than 1")
         page_concurrency = min(4, concurrency)
         page_slice = max(10, round((concurrency / page_concurrency) * 1.20))
-        api = self.clone(async=True, loop=cell.loop, request_timeout=timeout,
+        api = self.clone(aio=True, loop=cell.loop, request_timeout=timeout,
                          connect_timeout=timeout)
 
         @cell.tier()
@@ -594,7 +594,7 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def get_pager(self, *path, **kwargs):
         resource = path[0].split('/', 1)[0] if path else None
         if resource in self.aberrant_pager_resources:
-            assert not self.async, 'Only sync mode supported for: %s' % \
+            assert not self.aio, 'Only sync mode supported for: %s' % \
                 resource
             page_arg = kwargs.pop('page_size', None)
             limit_arg = kwargs.pop('limit', None)

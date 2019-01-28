@@ -19,6 +19,7 @@ class Logs(base.ECMCommand):
         "debug": 'dim',
         "info": 'blue',
         "warning": 'yellow',
+        "warn": 'yellow',  # Yes, we see both warning and warn now.
         "error": 'red',
         "critical": 'red'
     }

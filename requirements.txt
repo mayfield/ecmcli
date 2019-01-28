@@ -1,4 +1,4 @@
-syndicate>=2.1.3
+syndicate>=2.3.0
 aiohttp>=1.3,<2
 shellish>=5
 humanize
