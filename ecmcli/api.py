@@ -557,25 +557,25 @@ class ECMService(shellish.Eventer, syndicate.Service):
                          connect_timeout=timeout)
 
         @cell.tier()
-        def start(route):
-            probe = yield from api.get('routers', limit=1, fields='id',
+        async def start(route):
+            probe = await api.get('routers', limit=1, fields='id',
                                        **query)
             for i in range(0, probe.meta['total_count'], page_slice):
-                yield from route.emit(i, page_slice)
+                await route.emit(i, page_slice)
 
         @cell.tier(pool_size=page_concurrency)
-        def get_page(route, offset, limit):
-            page = yield from api.get('routers', expand='product',
+        async def get_page(route, offset, limit):
+            page = await api.get('routers', expand='product',
                                       offset=offset, limit=limit, **query)
             for router in page:
                 if router['product']['series'] != 3:
                     continue
-                yield from route.emit(router)
+                await route.emit(router)
 
         @cell.tier(pool_size=concurrency)
-        def get_remote(route, router):
+        async def get_remote(route, router):
             try:
-                res = (yield from api.get('remote', *path, id=router['id']))[0]
+                res = (await api.get('remote', *path, id=router['id']))[0]
             except Exception as e:
                 res = {
                     "success": False,
@@ -584,11 +584,11 @@ class ECMService(shellish.Eventer, syndicate.Service):
                     "id": int(router['id'])
                 }
             res['router'] = router
-            yield from route.emit(res)
+            await route.emit(res)
 
         @cell.cleaner
-        def close():
-            api.close()
+        async def close():
+            await api.close()
         return cell
 
     def get_pager(self, *path, **kwargs):
