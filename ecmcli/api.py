@@ -94,22 +94,6 @@ class ECMLogin(object):
         if self.session_mode:
             if self.initial_jwt:
                 self.reset(request)
-                logger.info("Attempting to use saved session for login...")
-                self._session.cookies.update({
-                    JWT_ACCOUNT_COOKIE: self.initial_jwt,
-                    #LEGACY_COOKIE: self.initial_legacy_id
-                })
-                self.initial_jwt = None
-                self.initial_legacy_id = None
-                logger.info("Loaded Session for SSO")
-                self.sso = True
-            elif self.initial_legacy_id:
-                raise Exception("OBSOLETE")
-                self.reset(request)
-                #self._session.cookies[LEGACY_COOKIE] = self.initial_legacy_id
-                self.initial_legacy_id = None
-                logger.info("Loaded Session for Legacy Auth")
-                self.sso = False
         elif not self._login_attempted:
             self._login_attempted = True
             self.reset(request)
@@ -272,6 +256,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
         self.save_last_username(username)
         self.username = username
         self.ident = self.get('login')
+        if not self.ident:
+            raise Unauthorized('No valid sessions found')
         if self.adapter.auth.sso:
             self.ident['user']['username'] = self.ident['user']['email']
 
