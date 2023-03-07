@@ -1,5 +1,5 @@
 syndicate>=3
-aiohttp>=3
+aiohttp<4
 shellish>=5
 humanize
 cellulario>=3

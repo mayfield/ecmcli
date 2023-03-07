@@ -25,8 +25,9 @@ import warnings
 from syndicate.adapters.requests import RequestsPager
 
 logger = logging.getLogger('ecm.api')
-JWT_COOKIE = 'cpAccountsJwt'
-LEGACY_COOKIE = 'sessionid'
+JWT_AUTH_COOKIE = 'cpAuthJwt'
+JWT_ACCOUNT_COOKIE = 'cpAccountsJwt'
+SESSION_COOKIE = 'accounts_sessionid'
 
 
 class HTMLJSONDecoder(syndicate.data.NormalJSONDecoder):
@@ -62,9 +63,9 @@ class TOSRequired(AuthFailure):
 
 class ECMLogin(object):
 
-    sso_url = 'https://accounts.cradlepointecm.com/login'
-    primer_url = 'https://cradlepointecm.com/api/v1/products/?limit=1'
-    legacy_url = 'https://cradlepointecm.com/api/v1/login/'
+    login_url = 'https://accounts.cradlepointecm.com/api/internal/v1/users/login'
+    auth_url = 'https://accounts.cradlepointecm.com/api/internal/v1/users/oidc_authorize' + \
+        '?redirect_url=https%3A%2F%2Faccounts.cradlepointecm.com'
 
     def __init__(self, api):
         self._site = api.site
@@ -95,16 +96,17 @@ class ECMLogin(object):
                 self.reset(request)
                 logger.info("Attempting to use saved session for login...")
                 self._session.cookies.update({
-                    JWT_COOKIE: self.initial_jwt,
-                    LEGACY_COOKIE: self.initial_legacy_id
+                    JWT_ACCOUNT_COOKIE: self.initial_jwt,
+                    #LEGACY_COOKIE: self.initial_legacy_id
                 })
                 self.initial_jwt = None
                 self.initial_legacy_id = None
                 logger.info("Loaded Session for SSO")
                 self.sso = True
             elif self.initial_legacy_id:
+                raise Exception("OBSOLETE")
                 self.reset(request)
-                self._session.cookies[LEGACY_COOKIE] = self.initial_legacy_id
+                #self._session.cookies[LEGACY_COOKIE] = self.initial_legacy_id
                 self.initial_legacy_id = None
                 logger.info("Loaded Session for Legacy Auth")
                 self.sso = False
@@ -116,23 +118,26 @@ class ECMLogin(object):
                 "username": self._username,
                 "password": self._password,
             }
-            resp = requests.post(self.sso_url, data=creds,
-                                 allow_redirects=False)
-            if JWT_COOKIE in resp.cookies:
-                logger.info("SSO Login Success")
-                self._session.cookies[JWT_COOKIE] = resp.cookies[JWT_COOKIE]
-                logger.debug("Priming session...")
-                self._session.get(self.primer_url)
-                self.sso = True
-            else:
-                logger.info("SSO auth failed, trying legacy auth")
-                resp = requests.post(self.legacy_url, json=creds)
-                if resp.status_code not in (200, 201):
-                    raise Unauthorized('Invalid Login')
-                if LEGACY_COOKIE in resp.cookies:
-                    self._session.cookies[LEGACY_COOKIE] = \
-                        resp.cookies[LEGACY_COOKIE]
-                self.sso = False
+            auth_req = requests.session()
+            resp = auth_req.post(self.login_url, json=
+                {
+                    "data": {
+                        "type": "login",
+                        "attributes": {
+                            "email": creds['username'],
+                            "password": creds['password'],
+                        }
+                    }
+                },
+                headers={"content-type": "application/vnd.api+json"},
+                allow_redirects=False)
+            if not resp.ok:
+                raise Unauthorized('Invalid Login')
+            auth_attrs = resp.json()['data']['attributes']
+            auth_resp = auth_req.get(self.auth_url + f'&state={auth_attrs["state"]}')
+            if not auth_resp.ok or JWT_ACCOUNT_COOKIE not in auth_req.cookies:
+                raise Unauthorized('Invalid Login')
+            self._session.cookies[JWT_ACCOUNT_COOKIE] = auth_req.cookies[JWT_ACCOUNT_COOKIE]
         request.prepare_cookies(self._session.cookies)
         return request
 
@@ -174,7 +179,7 @@ class AberrantPager(RequestsPager):
 
 class ECMService(shellish.Eventer, syndicate.Service):
 
-    site = 'https://cradlepointecm.com'
+    site = 'https://www.cradlepointecm.com'
     api_prefix = '/api/v1'
     session_file = os.path.expanduser('~/.ecm_session')
     globs = {
@@ -220,9 +225,9 @@ class ECMService(shellish.Eventer, syndicate.Service):
                 value = value.copy()
             setattr(clone, x, value)
         if clone.jwt is not None:
-            clone.adapter.set_cookie(JWT_COOKIE, clone.jwt)
-        else:
-            clone.adapter.set_cookie(LEGACY_COOKIE, clone.legacy_id)
+            clone.adapter.set_cookie(JWT_ACCOUNT_COOKIE, clone.jwt)
+        #else:
+            #clone.adapter.set_cookie(LEGACY_COOKIE, clone.legacy_id)
         return clone
 
     @property
@@ -248,8 +253,8 @@ class ECMService(shellish.Eventer, syndicate.Service):
 
     def reset_auth(self):
         self.fire_event('reset_auth')
-        self.adapter.set_cookie(LEGACY_COOKIE, None)
-        self.adapter.set_cookie(JWT_COOKIE, None)
+        #self.adapter.set_cookie(LEGACY_COOKIE, None)
+        self.adapter.set_cookie(JWT_ACCOUNT_COOKIE, None)
         self.save_session(None)
         self.ident = None
 
@@ -312,14 +317,15 @@ class ECMService(shellish.Eventer, syndicate.Service):
     def check_session(self):
         """ ECM sometimes updates the session token. We make sure we are in
         sync. """
+        #try:
+        #    legacy_id = self.adapter.get_cookie(LEGACY_COOKIE)
+        #except KeyError:
+        #    legacy_id = self.legacy_id
         try:
-            legacy_id = self.adapter.get_cookie(LEGACY_COOKIE)
-        except KeyError:
-            legacy_id = self.legacy_id
-        try:
-            jwt = self.adapter.get_cookie(JWT_COOKIE)
+            jwt = self.adapter.get_cookie(JWT_ACCOUNT_COOKIE)
         except KeyError:
             jwt = self.jwt
+        legacy_id = self.legacy_id # XXX
         if legacy_id != self.legacy_id or jwt != self.jwt:
             logger.info("Updating Session: ID:%s JWT:%s" % (legacy_id, jwt))
             self.save_session({
